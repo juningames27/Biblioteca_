@@ -61,11 +61,58 @@ app.post("/api/books", (req, res) => {
         return res.status(400).json({ error: "Autor é obrigatório." });
     }
 
-    const exists = db.books.find((b) => String(b.id) === id);
+    app.post("/api/books", (req, res) => {
+        const db = readDB();
 
-    if (exists) {
-        return res.status(400).json({ error: "ID já existe." });
-    }
+        const baseId = String(req.body.id || "").trim();
+        const title = String(req.body.title || "").trim();
+        const author = String(req.body.author || "").trim();
+        const quantity = Number(req.body.quantity || 1);
+
+        if (!baseId) {
+            return res.status(400).json({ error: "ID é obrigatório." });
+        }
+
+        if (!title) {
+            return res.status(400).json({ error: "Título é obrigatório." });
+        }
+
+        if (!author) {
+            return res.status(400).json({ error: "Autor é obrigatório." });
+        }
+
+        if (quantity < 1) {
+            return res.status(400).json({ error: "Quantidade inválida." });
+        }
+
+        const newBooks = [];
+
+        for (let i = 1; i <= quantity; i++) {
+            const newId = `${baseId} ed. ex.${i}`;
+
+            const exists = db.books.find((b) => String(b.id) === newId);
+            if (exists) {
+                continue; // evita duplicado
+            }
+
+            const newBook = {
+                id: newId,
+                title,
+                author,
+                status: "Disponível",
+            };
+
+            db.books.push(newBook);
+            newBooks.push(newBook);
+        }
+
+        writeDB(db);
+
+        res.json({
+            message: `${newBooks.length} exemplares cadastrados.`,
+            books: newBooks
+        });
+    });
 
     const newBook = {
         id,
