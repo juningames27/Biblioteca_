@@ -1,4 +1,4 @@
-const API_URL = "https://SEU-BACKEND.onrender.com/api";
+const API_URL = "hhttps://biblioteca-vsbz.onrender.com/";
 
 let statusChart;
 let monthlyChart;
