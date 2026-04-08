@@ -1,0 +1,345 @@
+const express = require("express");
+const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+const DB_FILE = path.join(__dirname, "db.json");
+
+if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(
+        DB_FILE,
+        JSON.stringify({ books: [], loans: [] }, null, 2)
+    );
+}
+
+const readDB = () => JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+
+const writeDB = (data) =>
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+
+function formatDateBR(date) {
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+}
+
+function parseBRDate(brDate) {
+    const [day, month, year] = String(brDate).split("/");
+    return new Date(Number(year), Number(month) - 1, Number(day));
+}
+
+app.get("/", (req, res) => {
+    res.send("Servidor Biblioteca NTE Online!");
+});
+
+// --- LIVROS ---
+app.get("/api/books", (req, res) => {
+    res.json(readDB().books);
+});
+
+app.post("/api/books", (req, res) => {
+    const db = readDB();
+
+    const id = String(req.body.id || "").trim();
+    const title = String(req.body.title || "").trim();
+    const author = String(req.body.author || "").trim();
+
+    if (!id) {
+        return res.status(400).json({ error: "ID é obrigatório." });
+    }
+
+    if (!title) {
+        return res.status(400).json({ error: "Título é obrigatório." });
+    }
+
+    if (!author) {
+        return res.status(400).json({ error: "Autor é obrigatório." });
+    }
+
+    const exists = db.books.find((b) => String(b.id) === id);
+
+    if (exists) {
+        return res.status(400).json({ error: "ID já existe." });
+    }
+
+    const newBook = {
+        id,
+        title,
+        author,
+        status: "Disponível",
+    };
+
+    db.books.push(newBook);
+    writeDB(db);
+
+    res.json(newBook);
+});
+
+app.put("/api/books/:id", (req, res) => {
+    const db = readDB();
+    const bookId = String(req.params.id);
+    const bookIndex = db.books.findIndex((b) => String(b.id) === bookId);
+
+    if (bookIndex === -1) {
+        return res.status(404).json({ error: "Livro não encontrado." });
+    }
+
+    const newTitle = String(req.body.title || "").trim();
+    const newAuthor = String(req.body.author || "").trim();
+
+    if (!newTitle) {
+        return res.status(400).json({ error: "Título é obrigatório." });
+    }
+
+    if (!newAuthor) {
+        return res.status(400).json({ error: "Autor é obrigatório." });
+    }
+
+    db.books[bookIndex].title = newTitle;
+    db.books[bookIndex].author = newAuthor;
+
+    db.loans.forEach((loan) => {
+        if (String(loan.bookId) === bookId) {
+            loan.bookTitle = newTitle;
+        }
+    });
+
+    writeDB(db);
+
+    res.json(db.books[bookIndex]);
+});
+
+app.delete("/api/books/:id", (req, res) => {
+    const db = readDB();
+    const bookIndex = db.books.findIndex((b) => String(b.id) === String(req.params.id));
+
+    if (bookIndex !== -1) {
+        if (db.books[bookIndex].status === "Alugado") {
+            return res.status(400).json({ error: "Não é possível remover um livro alugado!" });
+        }
+
+        db.books.splice(bookIndex, 1);
+        writeDB(db);
+        res.json({ message: "Livro removido!" });
+    } else {
+        res.status(404).json({ error: "Livro não encontrado." });
+    }
+});
+
+// --- EMPRÉSTIMOS ---
+app.get("/api/loans", (req, res) => {
+    const db = readDB();
+    res.json(db.loans.filter((l) => l.status === "Ativo"));
+});
+
+app.get("/api/loans/all", (req, res) => {
+    const db = readDB();
+    res.json(db.loans);
+});
+
+app.post("/api/loans", (req, res) => {
+    const db = readDB();
+
+    const book = db.books.find(
+        (b) => String(b.id).trim() === String(req.body.bookId).trim()
+    );
+
+    if (book && book.status.toLowerCase() === "disponível") {
+        const rentalDate = new Date(req.body.rentalDate);
+        const returnDate = new Date(rentalDate);
+        returnDate.setDate(returnDate.getDate() + 7);
+
+        const newLoan = {
+            id: Date.now().toString(),
+            studentName: req.body.studentName,
+            phone: req.body.phone,
+            school: req.body.school,
+            grade: req.body.grade,
+            bookId: book.id,
+            bookTitle: book.title,
+            rentalDate: req.body.rentalDate,
+            returnDate: formatDateBR(returnDate),
+            status: "Ativo",
+            deliveredAt: null,
+            renewCount: 0,
+            renewalHistory: [],
+        };
+
+        book.status = "Alugado";
+        db.loans.push(newLoan);
+        writeDB(db);
+
+        res.json(newLoan);
+    } else {
+        res.status(400).json({ error: "Livro indisponível ou não encontrado." });
+    }
+});
+
+app.put("/api/loans/:id", (req, res) => {
+    const db = readDB();
+    const idx = db.loans.findIndex((l) => String(l.id) === String(req.params.id));
+
+    if (idx !== -1) {
+        if (req.body.studentName !== undefined) db.loans[idx].studentName = req.body.studentName;
+        if (req.body.phone !== undefined) db.loans[idx].phone = req.body.phone;
+        if (req.body.school !== undefined) db.loans[idx].school = req.body.school;
+        if (req.body.grade !== undefined) db.loans[idx].grade = req.body.grade;
+
+        writeDB(db);
+        res.json(db.loans[idx]);
+    } else {
+        res.status(404).json({ error: "Empréstimo não encontrado" });
+    }
+});
+
+// RENOVAR -> adiciona 7 dias e conta +1 no mês atual
+app.patch("/api/loans/:id/renew", (req, res) => {
+    const db = readDB();
+    const loanIndex = db.loans.findIndex((l) => String(l.id) === String(req.params.id));
+
+    if (loanIndex === -1) {
+        return res.status(404).json({ error: "Empréstimo não encontrado." });
+    }
+
+    const loan = db.loans[loanIndex];
+
+    if (loan.status !== "Ativo") {
+        return res.status(400).json({ error: "Só é possível renovar empréstimos ativos." });
+    }
+
+    const parts = loan.returnDate.split("/");
+    const currentReturnDate = new Date(parts[2], parts[1] - 1, parts[0]);
+    currentReturnDate.setDate(currentReturnDate.getDate() + 7);
+
+    const day = String(currentReturnDate.getDate()).padStart(2, "0");
+    const month = String(currentReturnDate.getMonth() + 1).padStart(2, "0");
+    const year = currentReturnDate.getFullYear();
+
+    loan.returnDate = `${day}/${month}/${year}`;
+    loan.renewCount = Number(loan.renewCount || 0) + 1;
+
+    if (!Array.isArray(loan.renewalHistory)) {
+        loan.renewalHistory = [];
+    }
+
+    loan.renewalHistory.push({
+        renewedAt: new Date().toISOString(),
+        newReturnDate: loan.returnDate
+    });
+
+    writeDB(db);
+
+    res.json({
+        message: "Empréstimo renovado por mais 7 dias.",
+        loan
+    });
+});
+// CONFIRMAR ENTREGA
+app.patch("/api/loans/:id/return", (req, res) => {
+    const db = readDB();
+    const loanIndex = db.loans.findIndex((l) => String(l.id) === String(req.params.id));
+
+    if (loanIndex === -1) {
+        return res.status(404).json({ error: "Empréstimo não encontrado." });
+    }
+
+    const loan = db.loans[loanIndex];
+
+    if (loan.status === "Concluído") {
+        return res.status(400).json({ error: "Este empréstimo já foi finalizado." });
+    }
+
+    const book = db.books.find((b) => String(b.id) === String(loan.bookId));
+
+    if (book) {
+        book.status = "Disponível";
+    }
+
+    loan.status = "Concluído";
+    loan.deliveredAt = new Date().toISOString();
+
+    writeDB(db);
+
+    res.json({
+        message: "Entrega confirmada com sucesso.",
+        loan,
+    });
+});
+
+// EXCLUIR
+app.delete("/api/loans/:id", (req, res) => {
+    const db = readDB();
+    const loanIndex = db.loans.findIndex((l) => String(l.id) === String(req.params.id));
+
+    if (loanIndex === -1) {
+        return res.status(404).json({ error: "Empréstimo não encontrado." });
+    }
+
+    const loan = db.loans[loanIndex];
+
+    if (loan.status === "Ativo") {
+        const book = db.books.find((b) => String(b.id) === String(loan.bookId));
+        if (book) {
+            book.status = "Disponível";
+        }
+    }
+
+    db.loans.splice(loanIndex, 1);
+    writeDB(db);
+
+    res.json({ message: "Empréstimo removido do banco de dados." });
+});
+
+app.get("/api/dashboard", (req, res) => {
+    const db = readDB();
+
+    const totalBooks = db.books.length;
+    const rentedBooks = db.books.filter((b) => b.status.toLowerCase() === "alugado").length;
+
+    const today = new Date().setHours(0, 0, 0, 0);
+
+    const lateLoans = db.loans.filter((l) => {
+        if (l.status !== "Ativo") {
+            return false;
+        }
+
+        const dueDate = parseBRDate(l.returnDate).setHours(0, 0, 0, 0);
+        return dueDate < today;
+    }).length;
+
+    const monthlyData = new Array(12).fill(0);
+
+    db.loans.forEach((loan) => {
+        const rental = new Date(loan.rentalDate);
+        if (!isNaN(rental.getTime())) {
+            monthlyData[rental.getMonth()]++;
+        }
+
+        if (Array.isArray(loan.renewalHistory)) {
+            loan.renewalHistory.forEach((renewal) => {
+                const rd = new Date(renewal.renewedAt);
+                if (!isNaN(rd.getTime())) {
+                    monthlyData[rd.getMonth()]++;
+                }
+            });
+        }
+    });
+
+    res.json({
+        totalBooks,
+        rentedBooks,
+        availableBooks: totalBooks - rentedBooks,
+        lateLoans,
+        monthlyData,
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`);
+});

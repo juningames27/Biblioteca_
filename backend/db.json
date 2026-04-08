@@ -1,0 +1,31 @@
+{
+  "books": [
+    {
+      "id": "d",
+      "title": "O Pequeno Príncipe",
+      "author": "Saint-Exupéry",
+      "status": "Disponível"
+    },
+    {
+      "id": "GAYzão",
+      "title": "Arthur passivo",
+      "author": "Naydson ativo",
+      "status": "Disponível"
+    }
+  ],
+  "loans": [
+    {
+      "id": "1775615452483",
+      "studentName": "s",
+      "phone": "s",
+      "school": "E.M Moacyr Bacelar Nunes",
+      "grade": "3° Ano",
+      "bookId": "d",
+      "bookTitle": "O Pequeno Príncipe",
+      "rentalDate": "2026-04-08",
+      "returnDate": "14/04/2026",
+      "status": "Concluído",
+      "deliveredAt": "2026-04-08T02:30:53.872Z"
+    }
+  ]
+}
