@@ -256,7 +256,8 @@ document.getElementById("form-book").onsubmit = async (e) => {
         body: JSON.stringify({
             id: document.getElementById("book-id").value,
             title: document.getElementById("book-title").value,
-            author: document.getElementById("book-author").value
+            author: document.getElementById("book-author").value,
+            quantity: Number(document.getElementById("book-quantity").value)
         })
     });
 
