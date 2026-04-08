@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+<<<<<<< HEAD
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -158,42 +159,110 @@
                 <button id="btn-renew-loan" class="btn-info">Renovar</button>
                 <button id="btn-delete-loan" class="btn-danger-outline">Remover Aluguel</button>
             </div>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Biblioteca NTE | Gestão</title>
+    <link rel="icon" type="image/png" href="NTEimg.png" />
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="dark-theme">
+    <header>
+        <div class="logo" onclick="navigate('view-dashboard', null, 'btn-dashboard')">
+            <img src="NTEimg.png" alt="Logo" class="logo-img" />
+            Biblioteca
+
         </div>
 
-        <div id="modal-edit-book" class="modal">
-            <div class="modal-content">
-                <span class="close-btn" onclick="closeEditBookModal()">&times;</span>
-                <h3>Editar Livro</h3>
-                <div style="margin: 20px 0; display: flex; flex-direction: column; gap: 10px;">
-                    <label>Título:</label>
-                    <input type="text" id="edit-book-title" />
-                    <label>Autor:</label>
-                    <input type="text" id="edit-book-author" />
-                </div>
-                <button onclick="updateBook()" class="btn-success">Salvar Alterações</button>
+        <nav>
+            <button id="btn-dashboard" onclick="navigate('view-dashboard', this)" class="nav-btn active">
+                Início
+            </button>
+            <button id="btn-books" onclick="navigate('view-books', this)" class="nav-btn">
+                Livros
+            </button>
+            <button id="btn-loans" onclick="navigate('view-loans', this)" class="nav-btn">
+                Aluguel
+            </button>
+            <button id="theme-toggle" onclick="toggleTheme()">⚫</button>
+        </nav>
+    </header>
+
+    <main>
+        <section id="view-dashboard" class="view active">
+            <div class="dashboard-cards">
+                <div class="card"><h3>Acervo</h3><p id="dash-total-books">0</p></div>
+                <div class="card"><h3>Alugados</h3><p id="dash-rented-books">0</p></div>
+                <div class="card"><h3>Atrasados</h3><p id="dash-late-loans">0</p></div>
             </div>
-        </div>
 
-        <div id="modal-edit-loan" class="modal">
-            <div class="modal-content">
-                <span class="close-btn" onclick="closeEditLoanModal()">&times;</span>
-                <h3>Editar Dados do Aluno</h3>
-                <div style="margin: 20px 0; display: flex; flex-direction: column; gap: 10px;">
-                    <label>Nome do Aluno:</label>
-                    <input type="text" id="edit-loan-student" placeholder="Nome do Aluno" />
+            <div class="charts-container">
+                <div class="chart-box">
+                    <h3>Status</h3>
+                    <canvas id="chartStatus"></canvas>
+                </div>
+                <div class="chart-box">
+                    <h3>Anual</h3>
+                    <canvas id="chartMonthly"></canvas>
+                </div>
+            </div>
+        </section>
 
-                    <label>Telefone:</label>
-                    <input type="tel" id="edit-loan-phone" placeholder="Telefone/WhatsApp" />
+        <section id="view-books" class="view">
+            <h2>Registrar Livro</h2>
 
-                    <label>Escola:</label>
-                    <select id="edit-loan-school">
+            <div class="form-container">
+                <form id="form-book" class="input-group">
+                    <input type="text" id="book-id" placeholder="ID do Livro *" required />
+                    <input type="text" id="book-title" placeholder="Título *" required />
+                    <input type="text" id="book-author" placeholder="Autor *" required />
+                    <input type="number" id="book-quantity" placeholder="Exemplares *" min="1" value="1" required />
+                    <button type="submit">Cadastrar</button>
+                </form>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <input
+                    type="text"
+                    id="search-book-input"
+                    placeholder="🔍 Pesquisar livro pelo nome, autor ou ID..."
+                    style="width: 100%; max-width: 400px; padding: 10px; border-radius: 8px;"
+                />
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Título</th>
+                        <th>Autor</th>
+                        <th>Status</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="table-books-body"></tbody>
+            </table>
+        </section>
+
+        <section id="view-loans" class="view">
+            <h2>Registrar Saída</h2>
+
+            <div class="form-container">
+                <form id="form-loan" class="input-group">
+                    <input type="text" id="loan-student" placeholder="Nome do Aluno *" required />
+                    <input type="tel" id="loan-phone" placeholder="Telefone/WhatsApp *" required />
+
+                    <select id="loan-school" required>
+                        <option value="">Escola*</option>
                         <option value="E.M Cléber Sampaio">E.M Cléber Sampaio</option>
                         <option value="E.M Moacyr Bacelar Nunes">E.M Moacyr Bacelar Nunes</option>
                         <option value="E.M José Barreto De Araújo">E.M José Barreto De Araújo</option>
                     </select>
 
-                    <label>Série:</label>
-                    <select id="edit-loan-grade">
+                    <select id="loan-grade" required>
+                        <option value="">Série*</option>
                         <option value="1° Ano">1° Ano</option>
                         <option value="2° Ano">2° Ano</option>
                         <option value="3° Ano">3° Ano</option>
@@ -204,11 +273,109 @@
                         <option value="8° Ano">8° Ano</option>
                         <option value="9° Ano">9° Ano</option>
                     </select>
-                </div>
-                <button onclick="updateLoan()" class="btn-success">Salvar Alterações</button>
-            </div>
-        </div>
 
+<<<<<<< HEAD
         <script src="app.js?v=1.6"></script>
     </body>
 </html>
+
+                    <div class="book-search-wrapper">
+                        <input
+                            type="text"
+                            id="loan-book-search"
+                            placeholder="Buscar livro..."
+                            autocomplete="off"
+                            required
+                        />
+                        <input type="hidden" id="loan-book-id" />
+                        <div id="loan-book-results" class="book-search-results"></div>
+                    </div>
+
+                    <input type="date" id="loan-date" required />
+                    <button type="submit">Confirmar</button>
+                </form>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Aluno</th>
+                        <th>Telefone</th>
+                        <th>Escola</th>
+                        <th>Série</th>
+                        <th>Livro</th>
+                        <th>Entrega</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody id="table-loans-body"></tbody>
+            </table>
+        </section>
+    </main>
+
+    <div id="modal-loan" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h3>Ficha de Controle</h3>
+            <div id="modal-details" style="margin: 20px 0;"></div>
+            <button id="btn-confirm-return" class="btn-success">Confirmar Entrega</button>
+            <button id="btn-renew-loan" class="btn-info">Renovar</button>
+            <button id="btn-delete-loan" class="btn-danger-outline">Remover Aluguel</button>
+        </div>
+    </div>
+
+    <div id="modal-edit-book" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeEditBookModal()">&times;</span>
+            <h3>Editar Livro</h3>
+            <div style="margin: 20px 0; display: flex; flex-direction: column; gap: 10px;">
+                <label>Título:</label>
+                <input type="text" id="edit-book-title" />
+
+                <label>Autor:</label>
+                <input type="text" id="edit-book-author" />
+            </div>
+            <button onclick="updateBook()" class="btn-success">Salvar Alterações</button>
+        </div>
+    </div>
+
+    <div id="modal-edit-loan" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeEditLoanModal()">&times;</span>
+            <h3>Editar Dados do Aluno</h3>
+            <div style="margin: 20px 0; display: flex; flex-direction: column; gap: 10px;">
+                <label>Nome do Aluno:</label>
+                <input type="text" id="edit-loan-student" placeholder="Nome do Aluno" />
+
+                <label>Telefone:</label>
+                <input type="tel" id="edit-loan-phone" placeholder="Telefone/WhatsApp" />
+
+                <label>Escola:</label>
+                <select id="edit-loan-school">
+                    <option value="E.M Cléber Sampaio">E.M Cléber Sampaio</option>
+                    <option value="E.M Moacyr Bacelar Nunes">E.M Moacyr Bacelar Nunes</option>
+                    <option value="E.M José Barreto De Araújo">E.M José Barreto De Araújo</option>
+                </select>
+
+                <label>Série:</label>
+                <select id="edit-loan-grade">
+                    <option value="1° Ano">1° Ano</option>
+                    <option value="2° Ano">2° Ano</option>
+                    <option value="3° Ano">3° Ano</option>
+                    <option value="4° Ano">4° Ano</option>
+                    <option value="5° Ano">5° Ano</option>
+                    <option value="6° Ano">6° Ano</option>
+                    <option value="7° Ano">7° Ano</option>
+                    <option value="8° Ano">8° Ano</option>
+                    <option value="9° Ano">9° Ano</option>
+                </select>
+            </div>
+            <button onclick="updateLoan()" class="btn-success">Salvar Alterações</button>
+        </div>
+    </div>
+
+    <script src="app.js?v=2.0"></script>
+</body>
+</html>
+
+

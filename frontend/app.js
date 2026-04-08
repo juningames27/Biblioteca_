@@ -1,25 +1,34 @@
-const API_URL = "https://biblioteca-vsbz.onrender.com/api";
+const API_URL = "https://SEU-BACKEND.onrender.com/api";
 
 let statusChart;
 let monthlyChart;
-let currentLoanId;
-let currentBookId;
+let currentLoanId = null;
+let currentBookId = null;
 let allBooks = [];
 
-async function navigate(viewId, clickedButton = null, fallbackButtonId = null) {
-    document.querySelectorAll(".view").forEach((v) => {
-        v.classList.remove("active");
-    });
+async function request(url, options = {}) {
+    const res = await fetch(url, options);
 
-    document.querySelectorAll(".nav-btn").forEach((b) => {
-        b.classList.remove("active");
-    });
+    let data = null;
+    try {
+        data = await res.json();
+    } catch {
+        data = null;
+    }
+
+    if (!res.ok) {
+        throw new Error(data?.error || "Erro na requisição.");
+    }
+
+    return data;
+}
+
+async function navigate(viewId, clickedButton = null, fallbackButtonId = null) {
+    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+    document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
 
     const targetView = document.getElementById(viewId);
-
-    if (targetView) {
-        targetView.classList.add("active");
-    }
+    if (targetView) targetView.classList.add("active");
 
     let buttonToActivate = clickedButton;
 
@@ -27,7 +36,7 @@ async function navigate(viewId, clickedButton = null, fallbackButtonId = null) {
         buttonToActivate = document.getElementById(fallbackButtonId);
     }
 
-    if (buttonToActivate && buttonToActivate.classList.contains("nav-btn")) {
+    if (buttonToActivate?.classList.contains("nav-btn")) {
         buttonToActivate.classList.add("active");
     } else if (viewId === "view-dashboard") {
         document.getElementById("btn-dashboard")?.classList.add("active");
@@ -38,7 +47,7 @@ async function navigate(viewId, clickedButton = null, fallbackButtonId = null) {
     }
 
     if (viewId === "view-dashboard") {
-        loadDashboard();
+        await loadDashboard();
     }
 
     if (viewId === "view-books") {
@@ -69,29 +78,24 @@ function parseBRDate(brDate) {
     return new Date(Number(year), Number(month) - 1, Number(day));
 }
 
-// --- DASHBOARD ---
 async function loadDashboard() {
     try {
-        const res = await fetch(`${API_URL}/dashboard`);
-        const data = await res.json();
+        const data = await request(`${API_URL}/dashboard`);
 
-        document.getElementById("dash-total-books").textContent = data.totalBooks;
-        document.getElementById("dash-rented-books").textContent = data.rentedBooks;
-        document.getElementById("dash-late-loans").textContent = data.lateLoans;
+        document.getElementById("dash-total-books").textContent = data.totalBooks ?? 0;
+        document.getElementById("dash-rented-books").textContent = data.rentedBooks ?? 0;
+        document.getElementById("dash-late-loans").textContent = data.lateLoans ?? 0;
 
         const color = document.body.classList.contains("dark-theme") ? "#fff" : "#333";
 
-        if (statusChart) {
-            statusChart.destroy();
-        }
-
+        if (statusChart) statusChart.destroy();
         statusChart = new Chart(document.getElementById("chartStatus"), {
             type: "doughnut",
             data: {
                 labels: ["Livres", "Alugados"],
                 datasets: [
                     {
-                        data: [data.availableBooks, data.rentedBooks],
+                        data: [data.availableBooks ?? 0, data.rentedBooks ?? 0],
                         backgroundColor: ["#007bff", "#dc3545"]
                     }
                 ]
@@ -99,18 +103,13 @@ async function loadDashboard() {
             options: {
                 plugins: {
                     legend: {
-                        labels: {
-                            color: color
-                        }
+                        labels: { color }
                     }
                 }
             }
         });
 
-        if (monthlyChart) {
-            monthlyChart.destroy();
-        }
-
+        if (monthlyChart) monthlyChart.destroy();
         monthlyChart = new Chart(document.getElementById("chartMonthly"), {
             type: "bar",
             data: {
@@ -118,7 +117,7 @@ async function loadDashboard() {
                 datasets: [
                     {
                         label: "Empréstimos",
-                        data: data.monthlyData,
+                        data: data.monthlyData ?? new Array(12).fill(0),
                         backgroundColor: "#0d6efd"
                     }
                 ]
@@ -128,36 +127,34 @@ async function loadDashboard() {
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            color: color,
+                            color,
                             stepSize: 1
                         }
                     },
                     x: {
-                        ticks: {
-                            color: color
-                        }
+                        ticks: { color }
                     }
                 },
                 plugins: {
                     legend: {
-                        labels: {
-                            color: color
-                        }
+                        labels: { color }
                     }
                 }
             }
         });
-    } catch (e) {
-        console.error(e);
+    } catch (error) {
+        console.error("Erro ao carregar dashboard:", error);
     }
 }
 
-// --- LIVROS ---
 async function loadBooks() {
-    const res = await fetch(`${API_URL}/books`);
-    allBooks = await res.json();
-    renderBooks(allBooks);
-    setupLoanBookSearch();
+    try {
+        allBooks = await request(`${API_URL}/books`);
+        renderBooks(allBooks);
+        setupLoanBookSearch();
+    } catch (error) {
+        console.error("Erro ao carregar livros:", error);
+    }
 }
 
 function renderBooks(booksList) {
@@ -199,20 +196,21 @@ function closeEditBookModal() {
 }
 
 async function updateBook() {
-    const title = document.getElementById("edit-book-title").value;
-    const author = document.getElementById("edit-book-author").value;
+    try {
+        const title = document.getElementById("edit-book-title").value.trim();
+        const author = document.getElementById("edit-book-author").value.trim();
 
-    const res = await fetch(`${API_URL}/books/${currentBookId}`, {
-        method: "PUT",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ title, author })
-    });
+        await request(`${API_URL}/books/${encodeURIComponent(currentBookId)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, author })
+        });
 
-    if (res.ok) {
         closeEditBookModal();
-        loadBooks();
+        await loadBooks();
+        await loadDashboard();
+    } catch (error) {
+        alert(error.message);
     }
 }
 
@@ -222,8 +220,8 @@ document.getElementById("search-book-input").addEventListener("input", (e) => {
     renderBooks(
         allBooks.filter((b) => {
             return (
-                b.title.toLowerCase().includes(term) ||
-                b.author.toLowerCase().includes(term) ||
+                String(b.title).toLowerCase().includes(term) ||
+                String(b.author).toLowerCase().includes(term) ||
                 String(b.id).toLowerCase().includes(term)
             );
         })
@@ -231,22 +229,23 @@ document.getElementById("search-book-input").addEventListener("input", (e) => {
 });
 
 async function deleteBook(id) {
-    if (confirm("Deseja remover este livro do acervo?")) {
-        const res = await fetch(`${API_URL}/books/${id}`, {
+    if (!confirm("Deseja remover este livro do acervo?")) return;
+
+    try {
+        await request(`${API_URL}/books/${encodeURIComponent(id)}`, {
             method: "DELETE"
         });
 
-        if (res.ok) {
-            loadBooks();
-            loadDashboard();
-        } else {
-            alert((await res.json()).error);
-        }
+        await loadBooks();
+        await loadDashboard();
+    } catch (error) {
+        alert(error.message);
     }
 }
 
 document.getElementById("form-book").onsubmit = async (e) => {
     e.preventDefault();
+
 
     const res = await fetch(`${API_URL}/books`, {
         method: "POST",
@@ -261,15 +260,29 @@ document.getElementById("form-book").onsubmit = async (e) => {
         })
     });
 
-    if (res.ok) {
+    try {
+        await request(`${API_URL}/books`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                id: document.getElementById("book-id").value,
+                title: document.getElementById("book-title").value,
+                author: document.getElementById("book-author").value,
+                quantity: Number(document.getElementById("book-quantity").value)
+            })
+        });
+
+
         e.target.reset();
-        loadBooks();
-    } else {
-        alert((await res.json()).error);
+        document.getElementById("book-quantity").value = 1;
+
+        await loadBooks();
+        await loadDashboard();
+    } catch (error) {
+        alert(error.message);
     }
 };
 
-// --- BUSCA CUSTOMIZADA DE LIVRO ---
 function getAvailableBooks() {
     return allBooks.filter((b) => b.status === "Disponível");
 }
@@ -284,19 +297,15 @@ function renderLoanBookResults(filteredBooks) {
         return;
     }
 
-    results.innerHTML = filteredBooks
-        .map((book) => {
-            return `
-                <div class="book-search-item" onclick="selectLoanBook('${escapeAttr(book.id)}')">
-                    <div class="book-search-title">${escapeHtml(book.title)}</div>
-                    <div class="book-search-meta">
-                        <span>${escapeHtml(book.author)}</span>
-                        <span>ID: ${escapeHtml(book.id)}</span>
-                    </div>
-                </div>
-            `;
-        })
-        .join("");
+    results.innerHTML = filteredBooks.map((book) => `
+        <div class="book-search-item" onclick="selectLoanBook('${escapeAttr(book.id)}')">
+            <div class="book-search-title">${escapeHtml(book.title)}</div>
+            <div class="book-search-meta">
+                <span>${escapeHtml(book.author)}</span>
+                <span>ID: ${escapeHtml(book.id)}</span>
+            </div>
+        </div>
+    `).join("");
 
     results.classList.add("show");
 }
@@ -306,9 +315,7 @@ function setupLoanBookSearch() {
     const hiddenInput = document.getElementById("loan-book-id");
     const results = document.getElementById("loan-book-results");
 
-    if (!input || !hiddenInput || !results) {
-        return;
-    }
+    if (!input || !hiddenInput || !results) return;
 
     input.oninput = () => {
         const term = input.value.toLowerCase().trim();
@@ -323,8 +330,8 @@ function setupLoanBookSearch() {
 
         const filtered = availableBooks.filter((book) => {
             return (
-                book.title.toLowerCase().includes(term) ||
-                book.author.toLowerCase().includes(term) ||
+                String(book.title).toLowerCase().includes(term) ||
+                String(book.author).toLowerCase().includes(term) ||
                 String(book.id).toLowerCase().includes(term)
             );
         });
@@ -333,17 +340,13 @@ function setupLoanBookSearch() {
     };
 
     input.onfocus = () => {
-        const availableBooks = getAvailableBooks();
-        renderLoanBookResults(availableBooks.slice(0, 8));
+        renderLoanBookResults(getAvailableBooks().slice(0, 8));
     };
 }
 
 function selectLoanBook(bookId) {
     const book = allBooks.find((b) => String(b.id) === String(bookId));
-
-    if (!book) {
-        return;
-    }
+    if (!book) return;
 
     document.getElementById("loan-book-search").value = book.title;
     document.getElementById("loan-book-id").value = book.id;
@@ -354,58 +357,57 @@ document.addEventListener("click", (event) => {
     const wrapper = document.querySelector(".book-search-wrapper");
     const results = document.getElementById("loan-book-results");
 
-    if (!wrapper || !results) {
-        return;
-    }
+    if (!wrapper || !results) return;
 
     if (!wrapper.contains(event.target)) {
         results.classList.remove("show");
     }
 });
 
-// --- EMPRÉSTIMOS ---
 async function loadLoans() {
-    const res = await fetch(`${API_URL}/loans`);
-    const loans = await res.json();
+    try {
+        const loans = await request(`${API_URL}/loans`);
+        const tbody = document.getElementById("table-loans-body");
+        if (!tbody) return;
 
-    const tbody = document.getElementById("table-loans-body");
-    if (!tbody) return;
+        tbody.innerHTML = "";
 
-    tbody.innerHTML = "";
+        const today = new Date().setHours(0, 0, 0, 0);
 
-    const today = new Date().setHours(0, 0, 0, 0);
+        loans.forEach((l) => {
+            const dueDate = parseBRDate(l.returnDate).setHours(0, 0, 0, 0);
+            const isLate = dueDate < today;
 
-    loans.forEach((l) => {
-        const dueDate = parseBRDate(l.returnDate).setHours(0, 0, 0, 0);
-        const isLate = dueDate < today;
-
-        tbody.innerHTML += `
-            <tr onclick="openModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.bookTitle)}', '${escapeAttr(l.returnDate)}', '${escapeAttr(l.phone || "---")}', '${escapeAttr(l.school || "---")}', '${escapeAttr(l.grade || "---")}', '${escapeAttr(l.renewCount || 0)}')" style="cursor:pointer">
-                <td>${escapeHtml(l.studentName)}</td>
-                <td>${escapeHtml(l.phone || "---")}</td>
-                <td>${escapeHtml(l.school)}</td>
-                <td>${escapeHtml(l.grade || "---")}</td>
-                <td>${escapeHtml(l.bookTitle)}</td>
-                <td>
-                    ${escapeHtml(l.returnDate)}
-                    ${isLate
-                        ? '<span class="badge-late">ATRASADO</span>'
-                        : '<span class="badge-ontime">EM DIA</span>'}
-                </td>
-                <td>
-                    <button
-                        onclick="event.stopPropagation(); openEditLoanModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.school)}', '${escapeAttr(l.grade)}', '${escapeAttr(l.phone || "")}')"
-                        class="btn-edit-row"
-                    >
-                        ✏️
-                    </button>
-                    <button class="btn-ver" style="background: #fff; border-radius: 4px; padding: 2px 5px; color: #000; font-size: 12px; border: none;">
-                        🔍 Detalhes
-                    </button>
-                </td>
-            </tr>
-        `;
-    });
+            tbody.innerHTML += `
+                <tr onclick="openModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.bookTitle)}', '${escapeAttr(l.returnDate)}', '${escapeAttr(l.phone || "---")}', '${escapeAttr(l.school || "---")}', '${escapeAttr(l.grade || "---")}', '${escapeAttr(l.renewCount || 0)}')" style="cursor:pointer">
+                    <td>${escapeHtml(l.studentName)}</td>
+                    <td>${escapeHtml(l.phone || "---")}</td>
+                    <td>${escapeHtml(l.school || "---")}</td>
+                    <td>${escapeHtml(l.grade || "---")}</td>
+                    <td>${escapeHtml(l.bookTitle)}</td>
+                    <td>
+                        ${escapeHtml(l.returnDate)}
+                        ${isLate
+                            ? '<span class="badge-late">ATRASADO</span>'
+                            : '<span class="badge-ontime">EM DIA</span>'}
+                    </td>
+                    <td>
+                        <button
+                            onclick="event.stopPropagation(); openEditLoanModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.school || "")}', '${escapeAttr(l.grade || "")}', '${escapeAttr(l.phone || "")}')"
+                            class="btn-edit-row"
+                        >
+                            ✏️
+                        </button>
+                        <button class="btn-ver" style="background: #fff; border-radius: 4px; padding: 2px 5px; color: #000; font-size: 12px; border: none;">
+                            🔍 Detalhes
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    } catch (error) {
+        console.error("Erro ao carregar empréstimos:", error);
+    }
 }
 
 function openEditLoanModal(id, student, school, grade, phone) {
@@ -423,74 +425,68 @@ function closeEditLoanModal() {
 }
 
 async function updateLoan() {
-    const studentName = document.getElementById("edit-loan-student").value;
-    const school = document.getElementById("edit-loan-school").value;
-    const grade = document.getElementById("edit-loan-grade").value;
-    const phone = document.getElementById("edit-loan-phone").value;
+    try {
+        const studentName = document.getElementById("edit-loan-student").value.trim();
+        const school = document.getElementById("edit-loan-school").value;
+        const grade = document.getElementById("edit-loan-grade").value;
+        const phone = document.getElementById("edit-loan-phone").value.trim();
 
-    const res = await fetch(`${API_URL}/loans/${currentLoanId}`, {
-        method: "PUT",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            studentName,
-            school,
-            grade,
-            phone
-        })
-    });
+        await request(`${API_URL}/loans/${encodeURIComponent(currentLoanId)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ studentName, school, grade, phone })
+        });
 
-    if (res.ok) {
         closeEditLoanModal();
-        loadLoans();
+        await loadLoans();
+    } catch (error) {
+        alert(error.message);
     }
 }
 
 document.getElementById("form-loan").onsubmit = async (e) => {
     e.preventDefault();
 
-    const bookId = document.getElementById("loan-book-id").value.trim();
+    try {
+        const bookId = document.getElementById("loan-book-id").value.trim();
 
-    if (!bookId) {
-        alert("Selecione um livro da lista de busca.");
-        return;
-    }
+        if (!bookId) {
+            alert("Selecione um livro da lista de busca.");
+            return;
+        }
 
-    const res = await fetch(`${API_URL}/loans`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            studentName: document.getElementById("loan-student").value,
-            phone: document.getElementById("loan-phone").value,
-            school: document.getElementById("loan-school").value,
-            grade: document.getElementById("loan-grade").value,
-            bookId: bookId,
-            rentalDate: document.getElementById("loan-date").value
-        })
-    });
+        await request(`${API_URL}/loans`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                studentName: document.getElementById("loan-student").value,
+                phone: document.getElementById("loan-phone").value,
+                school: document.getElementById("loan-school").value,
+                grade: document.getElementById("loan-grade").value,
+                bookId,
+                rentalDate: document.getElementById("loan-date").value
+            })
+        });
 
-    if (res.ok) {
         e.target.reset();
         document.getElementById("loan-book-id").value = "";
         document.getElementById("loan-date").valueAsDate = new Date();
         document.getElementById("loan-book-results").classList.remove("show");
-        loadBooks();
-        loadLoans();
-        loadDashboard();
-    } else {
-        alert((await res.json()).error);
+
+        await loadBooks();
+        await loadLoans();
+        await loadDashboard();
+    } catch (error) {
+        alert(error.message);
     }
 };
 
-// --- MODAIS GERAIS ---
 function openModal(id, student, book, date, phone, school, grade, renewCount) {
     currentLoanId = id;
 
     const today = new Date().setHours(0, 0, 0, 0);
     const dueDate = parseBRDate(date).setHours(0, 0, 0, 0);
+
     const statusBadge = dueDate < today
         ? '<span class="badge-late">ATRASADO</span>'
         : '<span class="badge-ontime">EM DIA</span>';
@@ -513,61 +509,56 @@ function closeModal() {
 }
 
 document.getElementById("btn-confirm-return").onclick = async () => {
-    const res = await fetch(`${API_URL}/loans/${currentLoanId}/return`, {
-        method: "PATCH"
-    });
+    try {
+        const data = await request(`${API_URL}/loans/${encodeURIComponent(currentLoanId)}/return`, {
+            method: "PATCH"
+        });
 
-    const data = await res.json();
-
-    if (res.ok) {
         alert(data.message || "Entrega confirmada com sucesso.");
         closeModal();
-        loadLoans();
-        loadDashboard();
-        loadBooks();
-    } else {
-        alert(data.error || "Erro ao confirmar entrega.");
+
+        await loadLoans();
+        await loadDashboard();
+        await loadBooks();
+    } catch (error) {
+        alert(error.message);
     }
 };
 
 document.getElementById("btn-renew-loan").onclick = async () => {
-    const res = await fetch(`${API_URL}/loans/${currentLoanId}/renew`, {
-        method: "PATCH"
-    });
+    try {
+        const data = await request(`${API_URL}/loans/${encodeURIComponent(currentLoanId)}/renew`, {
+            method: "PATCH"
+        });
 
-    const data = await res.json();
-
-    if (res.ok) {
         alert(data.message || "Empréstimo renovado com sucesso.");
         closeModal();
-        loadLoans();
-        loadDashboard();
-        loadBooks();
-    } else {
-        alert(data.error || "Erro ao renovar empréstimo.");
+
+        await loadLoans();
+        await loadDashboard();
+        await loadBooks();
+    } catch (error) {
+        alert(error.message);
     }
 };
 
 document.getElementById("btn-delete-loan").onclick = async () => {
-    if (confirm("Remover registro do banco de dados?")) {
-        const res = await fetch(`${API_URL}/loans/${currentLoanId}`, {
+    if (!confirm("Remover registro do banco de dados?")) return;
+
+    try {
+        await request(`${API_URL}/loans/${encodeURIComponent(currentLoanId)}`, {
             method: "DELETE"
         });
 
-        const data = await res.json();
-
-        if (res.ok) {
-            closeModal();
-            loadLoans();
-            loadDashboard();
-            loadBooks();
-        } else {
-            alert(data.error || "Erro ao remover empréstimo.");
-        }
+        closeModal();
+        await loadLoans();
+        await loadDashboard();
+        await loadBooks();
+    } catch (error) {
+        alert(error.message);
     }
 };
 
-// --- TEMA E INICIALIZAÇÃO ---
 function toggleTheme() {
     const isDark = document.body.classList.contains("dark-theme");
 
@@ -575,7 +566,6 @@ function toggleTheme() {
     document.body.classList.toggle("dark-theme", !isDark);
 
     document.getElementById("theme-toggle").textContent = isDark ? "⚫" : "⚪";
-
     localStorage.setItem("theme", isDark ? "light" : "dark");
 
     loadDashboard();
