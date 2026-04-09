@@ -1,11 +1,8 @@
 {
   "books": [
-    {
-      "id": "891.7P987d1 ed. ex.1",
-      "title": "Pequeno principe",
-      "author": "ALEXANDRE PUSHKIN",
-      "status": "Disponível"
-    }
+    
   ],
-  "loans": []
+  "loans": [
+
+  ]
 }

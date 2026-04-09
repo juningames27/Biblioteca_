@@ -1,10 +1,11 @@
-const API_URL = "hhttps://biblioteca-vsbz.onrender.com/";
+const API_URL = "https://biblioteca-vsbz.onrender.com/api";
 
 let statusChart;
 let monthlyChart;
 let currentLoanId = null;
 let currentBookId = null;
 let allBooks = [];
+let currentView = localStorage.getItem("currentView") || "view-dashboard";
 
 async function request(url, options = {}) {
     const res = await fetch(url, options);
@@ -23,7 +24,16 @@ async function request(url, options = {}) {
     return data;
 }
 
+function setCurrentView(viewId) {
+    currentView = viewId;
+    localStorage.setItem("currentView", viewId);
+}
+
+
+
 async function navigate(viewId, clickedButton = null, fallbackButtonId = null) {
+    setCurrentView(viewId);
+
     document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
     document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
 
@@ -174,10 +184,17 @@ function renderBooks(booksList) {
                     <button
                         onclick="openEditBookModal('${escapeAttr(b.id)}', '${escapeAttr(b.title)}', '${escapeAttr(b.author)}')"
                         class="btn-edit-row"
+                        type="button"
                     >
                         ✏️
                     </button>
-                    <button onclick="deleteBook('${escapeAttr(b.id)}')" class="btn-delete-row">🗑️</button>
+                    <button
+                        onclick="deleteBook('${escapeAttr(b.id)}')"
+                        class="btn-delete-row"
+                        type="button"
+                    >
+                        🗑️
+                    </button>
                 </td>
             </tr>
         `;
@@ -207,8 +224,15 @@ async function updateBook() {
         });
 
         closeEditBookModal();
-        await loadBooks();
-        await loadDashboard();
+
+        const book = allBooks.find((b) => String(b.id) === String(currentBookId));
+        if (book) {
+            book.title = title;
+            book.author = author;
+        }
+
+        renderBooks(allBooks);
+        alert("Livro atualizado com sucesso.");
     } catch (error) {
         alert(error.message);
     }
@@ -235,9 +259,8 @@ async function deleteBook(id) {
         await request(`${API_URL}/books/${encodeURIComponent(id)}`, {
             method: "DELETE"
         });
-
-        await loadBooks();
-        await loadDashboard();
+        allBooks = allBooks.filter((b) => String(b.id) !== String(id));
+        renderBooks(allBooks);
     } catch (error) {
         alert(error.message);
     }
@@ -245,20 +268,6 @@ async function deleteBook(id) {
 
 document.getElementById("form-book").onsubmit = async (e) => {
     e.preventDefault();
-
-
-    const res = await fetch(`${API_URL}/books`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            id: document.getElementById("book-id").value,
-            title: document.getElementById("book-title").value,
-            author: document.getElementById("book-author").value,
-            quantity: Number(document.getElementById("book-quantity").value)
-        })
-    });
 
     try {
         await request(`${API_URL}/books`, {
@@ -272,12 +281,12 @@ document.getElementById("form-book").onsubmit = async (e) => {
             })
         });
 
-
         e.target.reset();
         document.getElementById("book-quantity").value = 1;
 
-        await loadBooks();
-        await loadDashboard();
+        const books = await request(`${API_URL}/books`);
+        allBooks = books;
+        renderBooks(allBooks);
     } catch (error) {
         alert(error.message);
     }
@@ -395,10 +404,15 @@ async function loadLoans() {
                         <button
                             onclick="event.stopPropagation(); openEditLoanModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.school || "")}', '${escapeAttr(l.grade || "")}', '${escapeAttr(l.phone || "")}')"
                             class="btn-edit-row"
+                            type="button"
                         >
                             ✏️
                         </button>
-                        <button class="btn-ver" style="background: #fff; border-radius: 4px; padding: 2px 5px; color: #000; font-size: 12px; border: none;">
+                        <button
+                            class="btn-ver"
+                            type="button"
+                            style="background: #fff; border-radius: 4px; padding: 2px 5px; color: #000; font-size: 12px; border: none;"
+                        >
                             🔍 Detalhes
                         </button>
                     </td>
@@ -439,6 +453,7 @@ async function updateLoan() {
 
         closeEditLoanModal();
         await loadLoans();
+        alert("Dados do aluno atualizados com sucesso.");
     } catch (error) {
         alert(error.message);
     }
@@ -473,9 +488,8 @@ document.getElementById("form-loan").onsubmit = async (e) => {
         document.getElementById("loan-date").valueAsDate = new Date();
         document.getElementById("loan-book-results").classList.remove("show");
 
-        await loadBooks();
         await loadLoans();
-        await loadDashboard();
+        await loadBooks();
     } catch (error) {
         alert(error.message);
     }
@@ -518,8 +532,8 @@ document.getElementById("btn-confirm-return").onclick = async () => {
         closeModal();
 
         await loadLoans();
-        await loadDashboard();
         await loadBooks();
+        closeModal();
     } catch (error) {
         alert(error.message);
     }
@@ -535,8 +549,7 @@ document.getElementById("btn-renew-loan").onclick = async () => {
         closeModal();
 
         await loadLoans();
-        await loadDashboard();
-        await loadBooks();
+        closeModal();
     } catch (error) {
         alert(error.message);
     }
@@ -552,8 +565,8 @@ document.getElementById("btn-delete-loan").onclick = async () => {
 
         closeModal();
         await loadLoans();
-        await loadDashboard();
         await loadBooks();
+        closeModal();
     } catch (error) {
         alert(error.message);
     }
@@ -571,10 +584,10 @@ function toggleTheme() {
     loadDashboard();
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    const saved = localStorage.getItem("theme") || "dark";
+document.addEventListener("DOMContentLoaded", async () => {
+    const savedTheme = localStorage.getItem("theme") || "dark";
 
-    if (saved === "light") {
+    if (savedTheme === "light") {
         document.body.className = "light-theme";
         document.getElementById("theme-toggle").textContent = "⚫";
     } else {
@@ -584,6 +597,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.getElementById("loan-date").valueAsDate = new Date();
 
-    loadDashboard();
-    loadBooks();
+    await navigate(currentView, null, currentView === "view-dashboard"
+        ? "btn-dashboard"
+        : currentView === "view-books"
+        ? "btn-books"
+        : "btn-loans");
 });

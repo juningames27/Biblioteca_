@@ -1,4 +1,3 @@
-const API_URL = "http://localhost:3000/api";
 const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
@@ -90,7 +89,6 @@ app.get("/", (req, res) => {
 });
 
 /* LIVROS */
-
 app.get("/api/books", (req, res) => {
     const db = readDB();
     sortBooks(db.books);
@@ -117,64 +115,9 @@ app.post("/api/books", (req, res) => {
         return res.status(400).json({ error: "Autor é obrigatório." });
     }
 
-
-    app.post("/api/books", (req, res) => {
-        const db = readDB();
-
-        const baseId = String(req.body.id || "").trim();
-        const title = String(req.body.title || "").trim();
-        const author = String(req.body.author || "").trim();
-        const quantity = Number(req.body.quantity || 1);
-
-        if (!baseId) {
-            return res.status(400).json({ error: "ID é obrigatório." });
-        }
-
-        if (!title) {
-            return res.status(400).json({ error: "Título é obrigatório." });
-        }
-
-        if (!author) {
-            return res.status(400).json({ error: "Autor é obrigatório." });
-        }
-
-        if (quantity < 1) {
-            return res.status(400).json({ error: "Quantidade inválida." });
-        }
-
-        const newBooks = [];
-
-        for (let i = 1; i <= quantity; i++) {
-            const newId = `${baseId} ed. ex.${i}`;
-
-            const exists = db.books.find((b) => String(b.id) === newId);
-            if (exists) {
-                continue; // evita duplicado
-            }
-
-            const newBook = {
-                id: newId,
-                title,
-                author,
-                status: "Disponível",
-            };
-
-            db.books.push(newBook);
-            newBooks.push(newBook);
-        }
-
-        writeDB(db);
-
-        res.json({
-            message: `${newBooks.length} exemplares cadastrados.`,
-            books: newBooks
-        });
-    });
-
     if (!Number.isInteger(quantity) || quantity < 1) {
         return res.status(400).json({ error: "Quantidade inválida." });
     }
-
 
     const newBooks = [];
     let nextNumber = getNextExemplarNumber(db.books, baseId);
@@ -257,7 +200,6 @@ app.delete("/api/books/:id", (req, res) => {
 });
 
 /* EMPRÉSTIMOS */
-
 app.get("/api/loans", (req, res) => {
     const db = readDB();
     res.json(db.loans.filter((l) => l.status === "Ativo"));
@@ -278,29 +220,12 @@ app.post("/api/loans", (req, res) => {
     const bookId = String(req.body.bookId || "").trim();
     const rentalDateValue = String(req.body.rentalDate || "").trim();
 
-    if (!studentName) {
-        return res.status(400).json({ error: "Nome do aluno é obrigatório." });
-    }
-
-    if (!phone) {
-        return res.status(400).json({ error: "Telefone é obrigatório." });
-    }
-
-    if (!school) {
-        return res.status(400).json({ error: "Escola é obrigatória." });
-    }
-
-    if (!grade) {
-        return res.status(400).json({ error: "Série é obrigatória." });
-    }
-
-    if (!bookId) {
-        return res.status(400).json({ error: "Livro é obrigatório." });
-    }
-
-    if (!rentalDateValue) {
-        return res.status(400).json({ error: "Data do empréstimo é obrigatória." });
-    }
+    if (!studentName) return res.status(400).json({ error: "Nome do aluno é obrigatório." });
+    if (!phone) return res.status(400).json({ error: "Telefone é obrigatório." });
+    if (!school) return res.status(400).json({ error: "Escola é obrigatória." });
+    if (!grade) return res.status(400).json({ error: "Série é obrigatória." });
+    if (!bookId) return res.status(400).json({ error: "Livro é obrigatório." });
+    if (!rentalDateValue) return res.status(400).json({ error: "Data do empréstimo é obrigatória." });
 
     const rentalDate = new Date(rentalDateValue);
 
@@ -453,7 +378,6 @@ app.delete("/api/loans/:id", (req, res) => {
 });
 
 /* DASHBOARD */
-
 app.get("/api/dashboard", (req, res) => {
     const db = readDB();
 
