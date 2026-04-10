@@ -102,7 +102,7 @@ async function loadDashboard() {
         statusChart = new Chart(document.getElementById("chartStatus"), {
             type: "doughnut",
             data: {
-                labels: ["Livres", "Alugados"],
+                labels: ["Livres", "Emprestados"],
                 datasets: [
                     {
                         data: [data.availableBooks ?? 0, data.rentedBooks ?? 0],
