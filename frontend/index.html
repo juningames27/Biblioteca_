@@ -5,221 +5,426 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Biblioteca NTE | Gestão</title>
     <link rel="icon" type="image/png" href="NTEimg.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="dark-theme">
-    <header>
-        <div class="logo" onclick="navigate('view-dashboard', null, 'btn-dashboard')">
-            <img src="NTEimg.png" alt="Logo" class="logo-img" />
-            Biblioteca
+
+    <div class="sidebar">
+        <div class="sidebar-logo" onclick="navigate('view-dashboard', null, 'btn-dashboard')">
+            <div class="logo-icon">
+                <img src="NTEimg.png" alt="NTE" class="logo-img" />
+            </div>
+            <div class="logo-text">
+                <span class="logo-title">Biblioteca</span>
+                <span class="logo-sub">NTE Digital</span>
+            </div>
         </div>
 
-        <nav>
-            <button
-                id="btn-dashboard"
-                onclick="navigate('view-dashboard', this)"
-                class="nav-btn active"
-            >
-                Início
+        <nav class="sidebar-nav">
+            <button id="btn-dashboard" onclick="navigate('view-dashboard', this)" class="nav-btn active">
+                <span class="nav-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>
+                    </svg>
+                </span>
+                <span>Painel</span>
             </button>
-            <button
-                id="btn-books"
-                onclick="navigate('view-books', this)"
-                class="nav-btn"
-            >
-                Livros
+            <button id="btn-books" onclick="navigate('view-books', this)" class="nav-btn">
+                <span class="nav-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                    </svg>
+                </span>
+                <span>Acervo</span>
             </button>
-            <button
-                id="btn-loans"
-                onclick="navigate('view-loans', this)"
-                class="nav-btn"
-            >
-                Emprestimo
+            <button id="btn-loans" onclick="navigate('view-loans', this)" class="nav-btn">
+                <span class="nav-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                </span>
+                <span>Empréstimos</span>
             </button>
-            <button id="theme-toggle" onclick="toggleTheme()">⚫</button>
         </nav>
-    </header>
 
-    <main>
+        <div class="sidebar-footer">
+            <button id="theme-toggle" onclick="toggleTheme()" class="theme-btn" title="Alternar tema">
+                <svg class="icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+                <svg class="icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                    <circle cx="12" cy="12" r="5"/>
+                    <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                    <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+                </svg>
+                <span>Alternar Tema</span>
+            </button>
+        </div>
+    </div>
+
+    <main class="main-content">
+
+        <!-- DASHBOARD -->
         <section id="view-dashboard" class="view active">
-            <div class="dashboard-cards">
-                <div class="card"><h3>Acervo</h3><p id="dash-total-books">0</p></div>
-                <div class="card"><h3>Emprestados</h3><p id="dash-rented-books" class="text-warning">0</p></div>
-                <div class="card"><h3>Atrasados</h3><p id="dash-late-loans" class="text-danger">0</p></div>
+            <div class="page-header">
+                <div class="page-header-inner">
+                    <h1 class="page-title">Visão Geral</h1>
+                    <p class="page-subtitle">Visão geral do acervo</p>
+                </div>
             </div>
 
-            <div class="charts-container">
-                <div class="chart-box">
-                    <h3>Status</h3>
+            <div class="stat-grid">
+                <div class="stat-card stat-total">
+                    <div class="stat-icon-wrap">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-body">
+                        <div class="stat-label">Acervo Total</div>
+                        <div class="stat-value" id="dash-total-books">0</div>
+                        <div class="stat-bar"><div class="stat-bar-fill" style="width:100%"></div></div>
+                    </div>
+                </div>
+                <div class="stat-card stat-rented">
+                    <div class="stat-icon-wrap">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </div>
+                    <div class="stat-body">
+                        <div class="stat-label">Em Circulação</div>
+                        <div class="stat-value" id="dash-rented-books">0</div>
+                        <div class="stat-bar"><div class="stat-bar-fill" style="width:60%"></div></div>
+                    </div>
+                </div>
+                <div class="stat-card stat-late">
+                    <div class="stat-icon-wrap">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                    </div>
+                    <div class="stat-body">
+                        <div class="stat-label">Atrasados</div>
+                        <div class="stat-value" id="dash-late-loans">0</div>
+                        <div class="stat-bar"><div class="stat-bar-fill" style="width:20%"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Situação do Acervo</h3>
+                        <span class="chart-tag">Hoje</span>
+                    </div>
                     <canvas id="chartStatus"></canvas>
                 </div>
-                <div class="chart-box">
-                    <h3>Anual</h3>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Empréstimos por Mês</h3>
+                        <span class="chart-tag">Este ano</span>
+                    </div>
                     <canvas id="chartMonthly"></canvas>
                 </div>
             </div>
         </section>
 
+        <!-- LIVROS -->
         <section id="view-books" class="view">
-            <h2>Registrar Livro</h2>
+            <div class="page-header">
+                <div class="page-header-inner">
+                    <h1 class="page-title">Acervo</h1>
+                    <p class="page-subtitle">Gerencie os livros da biblioteca</p>
+                </div>
+            </div>
 
-            <div class="form-container">
-                <form id="form-book" class="input-group">
-                    <input type="text" id="book-id" placeholder="ID do Livro *" required />
-                    <input type="text" id="book-title" placeholder="Título *" required />
-                    <input type="text" id="book-author" placeholder="Autor *" required />
-                    <input type="number" id="book-quantity" placeholder="Exemplares *" min="1" value="1" required />
-                    <button type="submit">Cadastrar</button>
+            <div class="content-card">
+                <div class="card-header-row">
+                    <h3 class="card-title">
+                        <span class="card-title-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        </span>
+                        Cadastrar Novo Livro
+                    </h3>
+                </div>
+                <form id="form-book" class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">ID do Livro</label>
+                        <input type="text" id="book-id" placeholder="ex: ISBN-978…" required />
+                    </div>
+                    <div class="field-group fg-2">
+                        <label class="field-label">Título</label>
+                        <input type="text" id="book-title" placeholder="Título do livro" required />
+                    </div>
+                    <div class="field-group fg-2">
+                        <label class="field-label">Autor / Editora</label>
+                        <input type="text" id="book-author" placeholder="Nome do autor ou editora" required />
+                    </div>
+                    <div class="field-group fg-small">
+                        <label class="field-label">Exemplares</label>
+                        <input type="number" id="book-quantity" min="1" value="1" required />
+                    </div>
+                    <div class="field-group fg-btn">
+                        <label class="field-label">&nbsp;</label>
+                        <button type="submit" class="btn-primary">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Cadastrar
+                        </button>
+                    </div>
                 </form>
             </div>
 
-            <div style="margin-bottom: 20px;">
-                <input
-                    type="text"
-                    id="search-book-input"
-                    placeholder="🔍 Pesquisar livro pelo nome, autor ou ID..."
-                    style="width: 100%; max-width: 400px; padding: 10px; border-radius: 8px;"
-                />
+            <div class="content-card">
+                <div class="card-header-row">
+                    <h3 class="card-title">
+                        <span class="card-title-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                        </span>
+                        Livros Cadastrados
+                    </h3>
+                    <div class="search-box">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" id="search-book-input" placeholder="Buscar por título, autor ou ID…" />
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th><th>Título</th><th>Autor / Editora</th><th>Status</th><th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-books-body"></tbody>
+                    </table>
+                </div>
             </div>
-
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Título</th>
-                        <th>Autor</th>
-                        <th>Status</th>
-                        <th>Ação</th>
-                    </tr>
-                </thead>
-                <tbody id="table-books-body"></tbody>
-            </table>
         </section>
 
+        <!-- EMPRÉSTIMOS -->
         <section id="view-loans" class="view">
-            <h2>Registrar Saída</h2>
+            <div class="page-header">
+                <div class="page-header-inner">
+                    <h1 class="page-title">Empréstimos</h1>
+                    <p class="page-subtitle">Registre e acompanhe os empréstimos ativos</p>
+                </div>
+            </div>
 
-            <div class="form-container">
-                <form id="form-loan" class="input-group">
-                    <input type="text" id="loan-student" placeholder="Nome do Aluno *" required />
-                    <input type="tel" id="loan-phone" placeholder="Telefone/WhatsApp *" required />
+            <div class="content-card">
+                <div class="card-header-row">
+                    <h3 class="card-title">
+                        <span class="card-title-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                        </span>
+                        Registrar Saída
+                    </h3>
+                </div>
+                <form id="form-loan" class="form-grid">
+                    <div class="field-group fg-2">
+                        <label class="field-label">Nome do Aluno</label>
+                        <input type="text" id="loan-student" placeholder="Nome completo" required />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Telefone / WhatsApp <span class="label-opt">(opcional)</span></label>
+                        <input type="text" id="loan-phone" placeholder="(99) 99999-9999" />
+                    </div>
+                    <div class="field-group fg-2">
+                        <label class="field-label">Escola</label>
+                        <select id="loan-school" required>
+                            <option value="">Selecione…</option>
+                            <option value="E.M Cléber Sampaio">E.M Cléber Sampaio</option>
+                            <option value="E.M Moacyr Bacelar Nunes">E.M Moacyr Bacelar Nunes</option>
+                            <option value="E.M José Barreto De Araújo">E.M José Barreto De Araújo</option>
+                        </select>
+                    </div>
+                    <div class="field-group fg-small">
+                        <label class="field-label">Série</label>
+                        <select id="loan-grade" required>
+                            <option value="">—</option>
+                            <option>1° Ano</option><option>2° Ano</option><option>3° Ano</option>
+                            <option>4° Ano</option><option>5° Ano</option><option>6° Ano</option>
+                            <option>7° Ano</option><option>8° Ano</option><option>9° Ano</option>
+                        </select>
+                    </div>
+                    <div class="field-group fg-small">
+                        <label class="field-label">Turma</label>
+                        <select id="loan-turma" required>
+                            <option value="">—</option>
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                            <option value="E">E</option>
+                            <option value="F">F</option>     
+                            <option value="G">G</option>
+                            <option value="H">H</option>   
+                            <option value="I">I</option>
+                            <option value="J">J</option>                                                    
+                        </select>
+                    </div>
+                    <div class="field-group fg-3">
+                        <label class="field-label">Livro</label>
+                        <div class="book-search-wrapper">
+                            <svg class="bsw-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                            <input type="text" id="loan-book-search" placeholder="Buscar livro disponível…" autocomplete="off" required />
+                            <input type="hidden" id="loan-book-id" />
+                            <div id="loan-book-results" class="book-search-results"></div>
+                        </div>
+                    </div>
+                    <div class="field-group fg-small">
+                        <label class="field-label">Data</label>
+                        <input type="date" id="loan-date" required />
+                    </div>
+                    <div class="field-group fg-btn">
+                        <label class="field-label">&nbsp;</label>
+                        <button type="submit" class="btn-primary">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                            Confirmar
+                        </button>
+                    </div>
+                </form>
+            </div>
 
-                    <select id="loan-school" required>
-                        <option value="">Escola*</option>
+            <div class="content-card">
+                <div class="card-header-row">
+                    <h3 class="card-title">
+                        <span class="card-title-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        </span>
+                        Empréstimos Ativos
+                    </h3>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Aluno</th><th>Telefone</th><th>Escola</th><th>Série</th><th>Turma</th><th>Livro</th><th>Devolução</th><th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-loans-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal: Detalhes -->
+    <div id="modal-loan" class="modal">
+        <div class="modal-overlay" onclick="closeModal()"></div>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Ficha de Controle</h3>
+                <button class="modal-close-btn" onclick="closeModal()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div id="modal-details" class="modal-body"></div>
+            <div class="modal-footer">
+                <button id="btn-confirm-return" class="btn-success">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    Confirmar Entrega
+                </button>
+                <button id="btn-renew-loan" class="btn-info">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.45"/></svg>
+                    Renovar +1 Mês
+                </button>
+                <button id="btn-delete-loan" class="btn-danger-outline">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                    Remover Registro
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Editar Livro -->
+    <div id="modal-edit-book" class="modal">
+        <div class="modal-overlay" onclick="closeEditBookModal()"></div>
+        <div class="modal-box modal-sm">
+            <div class="modal-header">
+                <h3>Editar Livro</h3>
+                <button class="modal-close-btn" onclick="closeEditBookModal()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="field-group"><label class="field-label">Título</label><input type="text" id="edit-book-title" /></div>
+                <div class="field-group" style="margin-top:14px"><label class="field-label">Autor / Editora</label><input type="text" id="edit-book-author" /></div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="updateBook()" class="btn-success" style="width:100%">Salvar Alterações</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Editar Empréstimo -->
+    <div id="modal-edit-loan" class="modal">
+        <div class="modal-overlay" onclick="closeEditLoanModal()"></div>
+        <div class="modal-box modal-sm">
+            <div class="modal-header">
+                <h3>Editar Dados do Aluno</h3>
+                <button class="modal-close-btn" onclick="closeEditLoanModal()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+                <div class="field-group"><label class="field-label">Nome</label><input type="text" id="edit-loan-student" /></div>
+                <div class="field-group"><label class="field-label">Telefone <span class="label-opt">(opcional)</span></label><input type="text" id="edit-loan-phone" /></div>
+                <div class="field-group">
+                    <label class="field-label">Escola</label>
+                    <select id="edit-loan-school">
                         <option value="E.M Cléber Sampaio">E.M Cléber Sampaio</option>
                         <option value="E.M Moacyr Bacelar Nunes">E.M Moacyr Bacelar Nunes</option>
                         <option value="E.M José Barreto De Araújo">E.M José Barreto De Araújo</option>
                     </select>
-
-                    <select id="loan-grade" required>
-                        <option value="">Série*</option>
-                        <option value="1° Ano">1° Ano</option>
-                        <option value="2° Ano">2° Ano</option>
-                        <option value="3° Ano">3° Ano</option>
-                        <option value="4° Ano">4° Ano</option>
-                        <option value="5° Ano">5° Ano</option>
-                        <option value="6° Ano">6° Ano</option>
-                        <option value="7° Ano">7° Ano</option>
-                        <option value="8° Ano">8° Ano</option>
-                        <option value="9° Ano">9° Ano</option>
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Série</label>
+                    <select id="edit-loan-grade">
+                        <option>1° Ano</option><option>2° Ano</option><option>3° Ano</option>
+                        <option>4° Ano</option><option>5° Ano</option><option>6° Ano</option>
+                        <option>7° Ano</option><option>8° Ano</option><option>9° Ano</option>
                     </select>
-
-                    <div class="book-search-wrapper">
-                        <input
-                            type="text"
-                            id="loan-book-search"
-                            placeholder="Buscar livro..."
-                            autocomplete="off"
-                            required
-                        />
-                        <input type="hidden" id="loan-book-id" />
-                        <div id="loan-book-results" class="book-search-results"></div>
-                    </div>
-
-                    <input type="date" id="loan-date" required />
-                    <button type="submit">Confirmar</button>
-                </form>
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Turma</label>
+                    <select id="edit-loan-turma">
+                        <option value="">—</option>
+                        <option value="A">A</option><option value="B">B</option>
+                        <option value="C">C</option><option value="D">D</option>
+                        <option value="E">E</option><option value="F">F</option>     
+                        <option value="G">G</option><option value="H">H</option>
+                        <option value="I">I</option><option value="J">J</option>                                             
+                    </select>
+                </div>
             </div>
-
-            <table>
-                <thead>
-                    <tr>
-                        <th>Aluno</th>
-                        <th>Telefone</th>
-                        <th>Escola</th>
-                        <th>Série</th>
-                        <th>Livro</th>
-                        <th>Entrega</th>
-                        <th>Ação</th>
-                    </tr>
-                </thead>
-                <tbody id="table-loans-body"></tbody>
-            </table>
-        </section>
-    </main>
-
-    <div id="modal-loan" class="modal">
-        <div class="modal-content">
-            <span class="close-btn" onclick="closeModal()">&times;</span>
-            <h3>Ficha de Controle</h3>
-            <div id="modal-details" style="margin: 20px 0;"></div>
-            <button id="btn-confirm-return" class="btn-success">Confirmar Entrega</button>
-            <button id="btn-renew-loan" class="btn-info">Renovar</button>
-            <button id="btn-delete-loan" class="btn-danger-outline">Remover Emprestimo</button>
+            <div class="modal-footer">
+                <button onclick="updateLoan()" class="btn-success" style="width:100%">Salvar Alterações</button>
+            </div>
         </div>
     </div>
 
-    <div id="modal-edit-book" class="modal">
-        <div class="modal-content">
-            <span class="close-btn" onclick="closeEditBookModal()">&times;</span>
-            <h3>Editar Livro</h3>
-            <div style="margin: 20px 0; display: flex; flex-direction: column; gap: 10px;">
-                <label>Título:</label>
-                <input type="text" id="edit-book-title" />
-
-                <label>Autor:</label>
-                <input type="text" id="edit-book-author" />
-            </div>
-            <button onclick="updateBook()" class="btn-success">Salvar Alterações</button>
-        </div>
-    </div>
-
-    <div id="modal-edit-loan" class="modal">
-        <div class="modal-content">
-            <span class="close-btn" onclick="closeEditLoanModal()">&times;</span>
-            <h3>Editar Dados do Aluno</h3>
-            <div style="margin: 20px 0; display: flex; flex-direction: column; gap: 10px;">
-                <label>Nome do Aluno:</label>
-                <input type="text" id="edit-loan-student" placeholder="Nome do Aluno" />
-
-                <label>Telefone:</label>
-                <input type="tel" id="edit-loan-phone" placeholder="Telefone/WhatsApp" />
-
-                <label>Escola:</label>
-                <select id="edit-loan-school">
-                    <option value="E.M Cléber Sampaio">E.M Cléber Sampaio</option>
-                    <option value="E.M Moacyr Bacelar Nunes">E.M Moacyr Bacelar Nunes</option>
-                    <option value="E.M José Barreto De Araújo">E.M José Barreto De Araújo</option>
-                </select>
-
-                <label>Série:</label>
-                <select id="edit-loan-grade">
-                    <option value="1° Ano">1° Ano</option>
-                    <option value="2° Ano">2° Ano</option>
-                    <option value="3° Ano">3° Ano</option>
-                    <option value="4° Ano">4° Ano</option>
-                    <option value="5° Ano">5° Ano</option>
-                    <option value="6° Ano">6° Ano</option>
-                    <option value="7° Ano">7° Ano</option>
-                    <option value="8° Ano">8° Ano</option>
-                    <option value="9° Ano">9° Ano</option>
-                </select>
-            </div>
-            <button onclick="updateLoan()" class="btn-success">Salvar Alterações</button>
-        </div>
-    </div>
-
-    <script src="app.js?v=2.0"></script>
+    <script src="app.js?v=2.1"></script>
 </body>
 </html>
