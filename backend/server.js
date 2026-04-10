@@ -112,7 +112,7 @@ app.post("/api/books", (req, res) => {
     }
 
     if (!author) {
-        return res.status(400).json({ error: "Autor é obrigatório." });
+        return res.status(400).json({ error: "Autor/Editora é obrigatório." });
     }
 
     if (!Number.isInteger(quantity) || quantity < 1) {
@@ -163,7 +163,7 @@ app.put("/api/books/:id", (req, res) => {
     }
 
     if (!newAuthor) {
-        return res.status(400).json({ error: "Autor é obrigatório." });
+        return res.status(400).json({ error: "Autor/Editora é obrigatório." });
     }
 
     db.books[bookIndex].title = newTitle;
@@ -217,11 +217,11 @@ app.post("/api/loans", (req, res) => {
     const phone = String(req.body.phone || "").trim();
     const school = String(req.body.school || "").trim();
     const grade = String(req.body.grade || "").trim();
+    const turma = String(req.body.turma || "").trim();
     const bookId = String(req.body.bookId || "").trim();
     const rentalDateValue = String(req.body.rentalDate || "").trim();
 
     if (!studentName) return res.status(400).json({ error: "Nome do aluno é obrigatório." });
-    if (!phone) return res.status(400).json({ error: "Telefone é obrigatório." });
     if (!school) return res.status(400).json({ error: "Escola é obrigatória." });
     if (!grade) return res.status(400).json({ error: "Série é obrigatória." });
     if (!bookId) return res.status(400).json({ error: "Livro é obrigatório." });
@@ -244,7 +244,7 @@ app.post("/api/loans", (req, res) => {
     }
 
     const returnDate = new Date(rentalDate);
-    returnDate.setDate(returnDate.getDate() + 7);
+    returnDate.setMonth(returnDate.getMonth() + 1);
 
     const newLoan = {
         id: Date.now().toString(),
@@ -252,6 +252,7 @@ app.post("/api/loans", (req, res) => {
         phone,
         school,
         grade,
+        turma,
         bookId: book.id,
         bookTitle: book.title,
         rentalDate: rentalDateValue,
@@ -281,6 +282,7 @@ app.put("/api/loans/:id", (req, res) => {
     if (req.body.phone !== undefined) db.loans[idx].phone = req.body.phone;
     if (req.body.school !== undefined) db.loans[idx].school = req.body.school;
     if (req.body.grade !== undefined) db.loans[idx].grade = req.body.grade;
+    if (req.body.turma !== undefined) db.loans[idx].turma = req.body.turma;
 
     writeDB(db);
     res.json(db.loans[idx]);
@@ -301,7 +303,7 @@ app.patch("/api/loans/:id/renew", (req, res) => {
     }
 
     const currentReturnDate = parseBRDate(loan.returnDate);
-    currentReturnDate.setDate(currentReturnDate.getDate() + 7);
+    currentReturnDate.setMonth(currentReturnDate.getMonth() + 1);
 
     loan.returnDate = formatDateBR(currentReturnDate);
     loan.renewCount = Number(loan.renewCount || 0) + 1;
@@ -318,7 +320,7 @@ app.patch("/api/loans/:id/renew", (req, res) => {
     writeDB(db);
 
     res.json({
-        message: "Empréstimo renovado por mais 7 dias.",
+        message: "Empréstimo renovado por mais 1 mês.",
         loan
     });
 });
@@ -364,11 +366,10 @@ app.delete("/api/loans/:id", (req, res) => {
 
     const loan = db.loans[loanIndex];
 
-    if (loan.status === "Ativo") {
-        const book = db.books.find((b) => String(b.id) === String(loan.bookId));
-        if (book) {
-            book.status = "Disponível";
-        }
+    // Sempre libera o livro ao remover o empréstimo, independente do status
+    const book = db.books.find((b) => String(b.id) === String(loan.bookId));
+    if (book) {
+        book.status = "Disponível";
     }
 
     db.loans.splice(loanIndex, 1);
