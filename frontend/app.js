@@ -1,5 +1,4 @@
-const API_URL = "https://biblioteca-vsbz.onrender.com/api";
-
+const API_URL = "http://localhost:3000/api"; 
 let statusChart;
 let monthlyChart;
 let currentLoanId = null;
@@ -28,8 +27,6 @@ function setCurrentView(viewId) {
     currentView = viewId;
     localStorage.setItem("currentView", viewId);
 }
-
-
 
 async function navigate(viewId, clickedButton = null, fallbackButtonId = null) {
     setCurrentView(viewId);
@@ -102,7 +99,7 @@ async function loadDashboard() {
         statusChart = new Chart(document.getElementById("chartStatus"), {
             type: "doughnut",
             data: {
-                labels: ["Livres", "Emprestados"],
+                labels: ["Livres", "Alugados"],
                 datasets: [
                     {
                         data: [data.availableBooks ?? 0, data.rentedBooks ?? 0],
@@ -387,12 +384,14 @@ async function loadLoans() {
             const dueDate = parseBRDate(l.returnDate).setHours(0, 0, 0, 0);
             const isLate = dueDate < today;
 
+            // ALTERAÇÃO: removido onclick da <tr>, modal só abre pelo botão "Detalhes"
             tbody.innerHTML += `
-                <tr onclick="openModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.bookTitle)}', '${escapeAttr(l.returnDate)}', '${escapeAttr(l.phone || "---")}', '${escapeAttr(l.school || "---")}', '${escapeAttr(l.grade || "---")}', '${escapeAttr(l.renewCount || 0)}')" style="cursor:pointer">
+                <tr>
                     <td>${escapeHtml(l.studentName)}</td>
                     <td>${escapeHtml(l.phone || "---")}</td>
                     <td>${escapeHtml(l.school || "---")}</td>
                     <td>${escapeHtml(l.grade || "---")}</td>
+                    <td>${escapeHtml(l.turma || "---")}</td>
                     <td>${escapeHtml(l.bookTitle)}</td>
                     <td>
                         ${escapeHtml(l.returnDate)}
@@ -402,16 +401,17 @@ async function loadLoans() {
                     </td>
                     <td>
                         <button
-                            onclick="event.stopPropagation(); openEditLoanModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.school || "")}', '${escapeAttr(l.grade || "")}', '${escapeAttr(l.phone || "")}')"
+                            onclick="openEditLoanModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.school || "")}', '${escapeAttr(l.grade || "")}', '${escapeAttr(l.phone || "")}', '${escapeAttr(l.turma || "")}')"
                             class="btn-edit-row"
                             type="button"
                         >
                             ✏️
                         </button>
                         <button
+                            onclick="openModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.bookTitle)}', '${escapeAttr(l.returnDate)}', '${escapeAttr(l.phone || "---")}', '${escapeAttr(l.school || "---")}', '${escapeAttr(l.grade || "---")}', '${escapeAttr(l.renewCount || 0)}', '${escapeAttr(l.turma || "---")}')"
                             class="btn-ver"
                             type="button"
-                            style="background: #fff; border-radius: 4px; padding: 2px 5px; color: #000; font-size: 12px; border: none;"
+                            style="background: var(--surface-2); border-radius: 4px; padding: 4px 8px; color: var(--text); font-size: 12px; border: 1px solid var(--border); cursor: pointer; transition: all 0.2s;"
                         >
                             🔍 Detalhes
                         </button>
@@ -424,14 +424,15 @@ async function loadLoans() {
     }
 }
 
-function openEditLoanModal(id, student, school, grade, phone) {
+// ALTERAÇÃO: openEditLoanModal agora recebe e define turma
+function openEditLoanModal(id, student, school, grade, phone, turma) {
     currentLoanId = id;
     document.getElementById("edit-loan-student").value = student;
     document.getElementById("edit-loan-school").value = school;
     document.getElementById("edit-loan-grade").value = grade;
     document.getElementById("edit-loan-phone").value = phone || "";
+    document.getElementById("edit-loan-turma").value = turma || "";
     document.getElementById("modal-edit-loan").style.display = "block";
-    closeModal();
 }
 
 function closeEditLoanModal() {
@@ -444,11 +445,12 @@ async function updateLoan() {
         const school = document.getElementById("edit-loan-school").value;
         const grade = document.getElementById("edit-loan-grade").value;
         const phone = document.getElementById("edit-loan-phone").value.trim();
+        const turma = document.getElementById("edit-loan-turma").value;
 
         await request(`${API_URL}/loans/${encodeURIComponent(currentLoanId)}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ studentName, school, grade, phone })
+            body: JSON.stringify({ studentName, school, grade, phone, turma })
         });
 
         closeEditLoanModal();
@@ -478,6 +480,7 @@ document.getElementById("form-loan").onsubmit = async (e) => {
                 phone: document.getElementById("loan-phone").value,
                 school: document.getElementById("loan-school").value,
                 grade: document.getElementById("loan-grade").value,
+                turma: document.getElementById("loan-turma").value,
                 bookId,
                 rentalDate: document.getElementById("loan-date").value
             })
@@ -495,7 +498,8 @@ document.getElementById("form-loan").onsubmit = async (e) => {
     }
 };
 
-function openModal(id, student, book, date, phone, school, grade, renewCount) {
+// ALTERAÇÃO: openModal agora recebe turma como 9º parâmetro
+function openModal(id, student, book, date, phone, school, grade, renewCount, turma) {
     currentLoanId = id;
 
     const today = new Date().setHours(0, 0, 0, 0);
@@ -510,6 +514,7 @@ function openModal(id, student, book, date, phone, school, grade, renewCount) {
         <p><b>Telefone:</b> ${escapeHtml(phone)}</p>
         <p><b>Escola:</b> ${escapeHtml(school)}</p>
         <p><b>Série:</b> ${escapeHtml(grade)}</p>
+        <p><b>Turma:</b> ${escapeHtml(turma)}</p>
         <p><b>Livro:</b> ${escapeHtml(book)}</p>
         <p><b>Entrega:</b> ${escapeHtml(date)} ${statusBadge}</p>
         <p><b>Renovações:</b> ${escapeHtml(renewCount)}</p>
@@ -533,7 +538,6 @@ document.getElementById("btn-confirm-return").onclick = async () => {
 
         await loadLoans();
         await loadBooks();
-        closeModal();
     } catch (error) {
         alert(error.message);
     }
@@ -549,7 +553,6 @@ document.getElementById("btn-renew-loan").onclick = async () => {
         closeModal();
 
         await loadLoans();
-        closeModal();
     } catch (error) {
         alert(error.message);
     }
@@ -566,7 +569,6 @@ document.getElementById("btn-delete-loan").onclick = async () => {
         closeModal();
         await loadLoans();
         await loadBooks();
-        closeModal();
     } catch (error) {
         alert(error.message);
     }
