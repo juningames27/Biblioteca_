@@ -1,4 +1,4 @@
-const API_URL = "https://biblioteca-vsbz.onrender.com";
+const API_URL = "https://biblioteca-vsbz.onrender.com/api";
 let statusChart;
 let monthlyChart;
 let currentLoanId = null;
