@@ -1,8 +1,46 @@
 {
   "books": [
-    
+    {
+      "id": "891.7P987d1 ed. ex.1",
+      "title": "A DAMA DE ESPADAS",
+      "author": "ALEXANDRE PUSHKIN",
+      "status": "Disponível"
+    },
+    {
+      "id": "IBSNMQ ed. ex.1",
+      "title": "Bibliografia do Riquelme",
+      "author": "Sim da Silva",
+      "status": "Alugado"
+    },
+    {
+      "id": "IBSNMQ ed. ex.2",
+      "title": "Bibliografia do Riquelme",
+      "author": "Sim da Silva",
+      "status": "Disponível"
+    },
+    {
+      "id": "IBSNMQ ed. ex.3",
+      "title": "Bibliografia do Riquelme",
+      "author": "Sim da Silva",
+      "status": "Disponível"
+    }
   ],
   "loans": [
-
+    {
+      "id": "1775855282116",
+      "studentName": "Riquelme",
+      "phone": "98970076449",
+      "school": "E.M Cléber Sampaio",
+      "grade": "7° Ano",
+      "turma": "A",
+      "bookId": "IBSNMQ ed. ex.1",
+      "bookTitle": "Bibliografia do Riquelme",
+      "rentalDate": "2026-04-10",
+      "returnDate": "09/05/2026",
+      "status": "Ativo",
+      "deliveredAt": null,
+      "renewCount": 0,
+      "renewalHistory": []
+    }
   ]
 }
