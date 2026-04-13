@@ -6,12 +6,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Conexão MongoDB
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log("MongoDB conectado!"))
     .catch(err => console.error("Erro MongoDB:", err));
 
-// Schemas
 const bookSchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true },
     title: String,
@@ -39,7 +37,6 @@ const loanSchema = new mongoose.Schema({
 const Book = mongoose.model("Book", bookSchema);
 const Loan = mongoose.model("Loan", loanSchema);
 
-// Helpers
 function formatDateBR(date) {
     const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -82,10 +79,13 @@ async function getNextExemplarNumber(baseId) {
 
 app.get("/", (req, res) => res.send("Servidor Biblioteca NTE Online!"));
 
-// LIVROS
 app.get("/api/books", async (req, res) => {
-    const books = await Book.find({}).lean();
-    res.json(sortBooks(books));
+    try {
+        const books = await Book.find({}).lean();
+        res.json(sortBooks(books));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.post("/api/books", async (req, res) => {
@@ -153,15 +153,22 @@ app.delete("/api/books/:id", async (req, res) => {
     }
 });
 
-// EMPRÉSTIMOS
 app.get("/api/loans", async (req, res) => {
-    const loans = await Loan.find({ status: "Ativo" }).lean();
-    res.json(loans);
+    try {
+        const loans = await Loan.find({ status: "Ativo" }).lean();
+        res.json(loans);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.get("/api/loans/all", async (req, res) => {
-    const loans = await Loan.find({}).lean();
-    res.json(loans);
+    try {
+        const loans = await Loan.find({}).lean();
+        res.json(loans);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.post("/api/loans", async (req, res) => {
@@ -273,7 +280,6 @@ app.delete("/api/loans/:id", async (req, res) => {
     }
 });
 
-// DASHBOARD
 app.get("/api/dashboard", async (req, res) => {
     try {
         const books = await Book.find({}).lean();
