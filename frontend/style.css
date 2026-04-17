@@ -821,6 +821,69 @@ tbody tr:hover { background: var(--surface-2); }
 .modal-footer .btn-info,
 .modal-footer .btn-danger-outline { width: 100%; justify-content: center; }
 
+/* ─── PAGINAÇÃO ──────────────────────────────────────────── */
+#books-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 2px 2px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.pagination-info {
+    font-size: 0.78rem;
+    color: var(--text-sec);
+}
+
+.pagination-info b {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.pagination-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.pagination-label {
+    font-size: 0.82rem;
+    color: var(--text);
+    padding: 0 6px;
+}
+
+.pagination-label b {
+    font-weight: 700;
+}
+
+.page-btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-sec);
+    border-radius: var(--radius-xs);
+    padding: 5px 11px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-family: 'Geist', sans-serif;
+    line-height: 1;
+    transition: all var(--transition);
+    min-width: 32px;
+    display: grid;
+    place-items: center;
+}
+
+.page-btn:hover:not(:disabled) {
+    border-color: var(--border-h);
+    color: var(--text);
+    background: var(--surface-s);
+}
+
+.page-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
 /* ─── SCROLLBAR ──────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -857,4 +920,10 @@ tbody tr:hover { background: var(--surface-2); }
     .card-header-row { flex-direction: column; align-items: flex-start; }
     .search-box { min-width: 100%; }
     .main-content { padding: 20px 16px; }
+
+    #books-pagination {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
 }
