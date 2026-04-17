@@ -6,6 +6,10 @@ let currentBookId = null;
 let allBooks = [];
 let currentView = localStorage.getItem("currentView") || "view-dashboard";
 
+// ─── PAGINAÇÃO ────────────────────────────────────────────
+let currentPage = 1;
+const PAGE_SIZE = 30;
+
 async function request(url, options = {}) {
     const res = await fetch(url, options);
 
@@ -157,6 +161,7 @@ async function loadDashboard() {
 async function loadBooks() {
     try {
         allBooks = await request(`${API_URL}/books`);
+        currentPage = 1;
         renderBooks(allBooks);
         setupLoanBookSearch();
     } catch (error) {
@@ -164,13 +169,20 @@ async function loadBooks() {
     }
 }
 
+// ─── RENDER COM PAGINAÇÃO ─────────────────────────────────
 function renderBooks(booksList) {
     const tbody = document.getElementById("table-books-body");
     if (!tbody) return;
 
+    const totalPages = Math.max(1, Math.ceil(booksList.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = 1;
+
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const pageItems = booksList.slice(start, start + PAGE_SIZE);
+
     tbody.innerHTML = "";
 
-    booksList.forEach((b) => {
+    pageItems.forEach((b) => {
         tbody.innerHTML += `
             <tr>
                 <td>${escapeHtml(b.id)}</td>
@@ -182,21 +194,78 @@ function renderBooks(booksList) {
                         onclick="openEditBookModal('${escapeAttr(b.id)}', '${escapeAttr(b.title)}', '${escapeAttr(b.author)}')"
                         class="btn-edit-row"
                         type="button"
-                    >
-                        ✏️
-                    </button>
+                    >✏️</button>
                     <button
                         onclick="deleteBook('${escapeAttr(b.id)}')"
                         class="btn-delete-row"
                         type="button"
-                    >
-                        🗑️
-                    </button>
+                    >🗑️</button>
                 </td>
             </tr>
         `;
     });
+
+    renderPagination(booksList.length, totalPages);
 }
+
+function renderPagination(total, totalPages) {
+    let container = document.getElementById("books-pagination");
+
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "books-pagination";
+        const tableWrapper = document.querySelector("#view-books .table-wrapper");
+        if (tableWrapper) tableWrapper.after(container);
+    }
+
+    const start = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+    const end = Math.min(currentPage * PAGE_SIZE, total);
+
+    const btnStyle = `class="page-btn"`;
+
+    container.innerHTML = `
+        <span class="pagination-info">
+            Mostrando <b>${start}–${end}</b> de <b>${total}</b> livros
+        </span>
+        <div class="pagination-controls">
+            <button ${btnStyle} onclick="goToPage(1)" ${currentPage === 1 ? "disabled" : ""} title="Primeira">«</button>
+            <button ${btnStyle} onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? "disabled" : ""} title="Anterior">‹</button>
+            <span class="pagination-label">Página <b>${currentPage}</b> de <b>${totalPages}</b></span>
+            <button ${btnStyle} onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? "disabled" : ""} title="Próxima">›</button>
+            <button ${btnStyle} onclick="goToPage(${totalPages})" ${currentPage === totalPages ? "disabled" : ""} title="Última">»</button>
+        </div>
+    `;
+}
+
+function goToPage(page) {
+    const term = document.getElementById("search-book-input")?.value.toLowerCase().trim() || "";
+    const filtered = term
+        ? allBooks.filter((b) =>
+            String(b.title).toLowerCase().includes(term) ||
+            String(b.author).toLowerCase().includes(term) ||
+            String(b.id).toLowerCase().includes(term))
+        : allBooks;
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    currentPage = Math.max(1, Math.min(page, totalPages));
+    renderBooks(filtered);
+}
+
+// ─── BUSCA DE LIVROS (reseta página) ─────────────────────
+document.getElementById("search-book-input").addEventListener("input", (e) => {
+    currentPage = 1;
+    const term = e.target.value.toLowerCase().trim();
+
+    renderBooks(
+        allBooks.filter((b) => {
+            return (
+                String(b.title).toLowerCase().includes(term) ||
+                String(b.author).toLowerCase().includes(term) ||
+                String(b.id).toLowerCase().includes(term)
+            );
+        })
+    );
+});
 
 function openEditBookModal(id, title, author) {
     currentBookId = id;
@@ -235,20 +304,6 @@ async function updateBook() {
     }
 }
 
-document.getElementById("search-book-input").addEventListener("input", (e) => {
-    const term = e.target.value.toLowerCase().trim();
-
-    renderBooks(
-        allBooks.filter((b) => {
-            return (
-                String(b.title).toLowerCase().includes(term) ||
-                String(b.author).toLowerCase().includes(term) ||
-                String(b.id).toLowerCase().includes(term)
-            );
-        })
-    );
-});
-
 async function deleteBook(id) {
     if (!confirm("Deseja remover este livro do acervo?")) return;
 
@@ -283,12 +338,14 @@ document.getElementById("form-book").onsubmit = async (e) => {
 
         const books = await request(`${API_URL}/books`);
         allBooks = books;
+        currentPage = 1;
         renderBooks(allBooks);
     } catch (error) {
         alert(error.message);
     }
 };
 
+// ─── BUSCA DE LIVRO NO FORMULÁRIO DE EMPRÉSTIMO ───────────
 function getAvailableBooks() {
     return allBooks.filter((b) => b.status === "Disponível");
 }
@@ -370,6 +427,7 @@ document.addEventListener("click", (event) => {
     }
 });
 
+// ─── EMPRÉSTIMOS ──────────────────────────────────────────
 async function loadLoans() {
     try {
         const loans = await request(`${API_URL}/loans`);
@@ -403,17 +461,13 @@ async function loadLoans() {
                             onclick="openEditLoanModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.school || "")}', '${escapeAttr(l.grade || "")}', '${escapeAttr(l.phone || "")}', '${escapeAttr(l.turma || "")}')"
                             class="btn-edit-row"
                             type="button"
-                        >
-                            ✏️
-                        </button>
+                        >✏️</button>
                         <button
                             onclick="openModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.bookTitle)}', '${escapeAttr(l.returnDate)}', '${escapeAttr(l.phone || "---")}', '${escapeAttr(l.school || "---")}', '${escapeAttr(l.grade || "---")}', '${escapeAttr(l.renewCount || 0)}', '${escapeAttr(l.turma || "---")}')"
                             class="btn-ver"
                             type="button"
                             style="background: var(--surface-2); border-radius: 4px; padding: 4px 8px; color: var(--text); font-size: 12px; border: 1px solid var(--border); cursor: pointer; transition: all 0.2s;"
-                        >
-                            🔍 Detalhes
-                        </button>
+                        >🔍 Detalhes</button>
                     </td>
                 </tr>
             `;
@@ -496,6 +550,7 @@ document.getElementById("form-loan").onsubmit = async (e) => {
     }
 };
 
+// ─── MODAL DETALHES ───────────────────────────────────────
 function openModal(id, student, book, date, phone, school, grade, renewCount, turma) {
     currentLoanId = id;
 
@@ -571,6 +626,7 @@ document.getElementById("btn-delete-loan").onclick = async () => {
     }
 };
 
+// ─── TEMA ─────────────────────────────────────────────────
 function toggleTheme() {
     const isDark = document.body.classList.contains("dark-theme");
 
@@ -583,6 +639,7 @@ function toggleTheme() {
     loadDashboard();
 }
 
+// ─── INIT ─────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
     const savedTheme = localStorage.getItem("theme") || "dark";
 
