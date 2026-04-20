@@ -35,27 +35,26 @@ function setCurrentView(viewId) {
 async function navigate(viewId, clickedButton = null, fallbackButtonId = null) {
     setCurrentView(viewId);
 
+    // Troca a view ativa
     document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
-    document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
-
     const targetView = document.getElementById(viewId);
     if (targetView) targetView.classList.add("active");
 
-    let buttonToActivate = clickedButton;
+    // Limpa active de todos os botões de navegação (sidebar + mobile bottom nav)
+    document.querySelectorAll(".nav-btn, .mobile-nav-btn").forEach((b) => b.classList.remove("active"));
 
-    if (!buttonToActivate && fallbackButtonId) {
-        buttonToActivate = document.getElementById(fallbackButtonId);
+    // Ativa TODOS os botões (de ambas as barras) correspondentes à view
+    document.querySelectorAll(`[data-view="${viewId}"]`).forEach((b) => b.classList.add("active"));
+
+    // Fallback — caso algum botão específico tenha sido passado sem data-view
+    if (clickedButton && !clickedButton.hasAttribute("data-view")) {
+        clickedButton.classList.add("active");
+    } else if (!clickedButton && fallbackButtonId) {
+        document.getElementById(fallbackButtonId)?.classList.add("active");
     }
 
-    if (buttonToActivate?.classList.contains("nav-btn")) {
-        buttonToActivate.classList.add("active");
-    } else if (viewId === "view-dashboard") {
-        document.getElementById("btn-dashboard")?.classList.add("active");
-    } else if (viewId === "view-books") {
-        document.getElementById("btn-books")?.classList.add("active");
-    } else if (viewId === "view-loans") {
-        document.getElementById("btn-loans")?.classList.add("active");
-    }
+    // Rola para o topo ao trocar de tela (útil no celular)
+    window.scrollTo({ top: 0, behavior: "smooth" });
 
     if (viewId === "view-dashboard") {
         await loadDashboard();
@@ -89,6 +88,7 @@ function parseBRDate(brDate) {
     return new Date(Number(year), Number(month) - 1, Number(day));
 }
 
+// ─── DASHBOARD ────────────────────────────────────────────
 async function loadDashboard() {
     try {
         const data = await request(`${API_URL}/dashboard`);
@@ -97,7 +97,10 @@ async function loadDashboard() {
         document.getElementById("dash-rented-books").textContent = data.rentedBooks ?? 0;
         document.getElementById("dash-late-loans").textContent = data.lateLoans ?? 0;
 
-        const color = document.body.classList.contains("dark-theme") ? "#fff" : "#333";
+        const isDark = document.body.classList.contains("dark-theme");
+        const color = isDark ? "#e4eaf8" : "#111827";
+        const gridColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
+        const isMobile = window.innerWidth <= 768;
 
         if (statusChart) statusChart.destroy();
         statusChart = new Chart(document.getElementById("chartStatus"), {
@@ -107,14 +110,32 @@ async function loadDashboard() {
                 datasets: [
                     {
                         data: [data.availableBooks ?? 0, data.rentedBooks ?? 0],
-                        backgroundColor: ["#007bff", "#dc3545"]
+                        backgroundColor: ["#6ea8fe", "#f5a623"],
+                        borderColor: "transparent",
+                        borderWidth: 0,
+                        hoverOffset: 6
                     }
                 ]
             },
             options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "60%",
+                layout: {
+                    padding: { top: 4, bottom: 4 }
+                },
                 plugins: {
                     legend: {
-                        labels: { color }
+                        position: "bottom",
+                        labels: {
+                            color,
+                            padding: isMobile ? 10 : 14,
+                            font: { family: "Geist", size: isMobile ? 11 : 12 },
+                            boxWidth: 10,
+                            boxHeight: 10,
+                            usePointStyle: true,
+                            pointStyle: "circle"
+                        }
                     }
                 }
             }
@@ -129,27 +150,31 @@ async function loadDashboard() {
                     {
                         label: "Empréstimos",
                         data: data.monthlyData ?? new Array(12).fill(0),
-                        backgroundColor: "#0d6efd"
+                        backgroundColor: "#6ea8fe",
+                        borderRadius: 6,
+                        maxBarThickness: isMobile ? 18 : 28
                     }
                 ]
             },
             options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: { top: 4, bottom: 0 }
+                },
                 scales: {
                     y: {
                         beginAtZero: true,
-                        ticks: {
-                            color,
-                            stepSize: 1
-                        }
+                        ticks: { color, stepSize: 1, font: { family: "Geist", size: isMobile ? 10 : 11 } },
+                        grid: { color: gridColor, drawBorder: false }
                     },
                     x: {
-                        ticks: { color }
+                        ticks: { color, font: { family: "Geist", size: isMobile ? 10 : 11 } },
+                        grid: { display: false }
                     }
                 },
                 plugins: {
-                    legend: {
-                        labels: { color }
-                    }
+                    legend: { display: false }
                 }
             }
         });
@@ -158,6 +183,7 @@ async function loadDashboard() {
     }
 }
 
+// ─── LIVROS ───────────────────────────────────────────────
 async function loadBooks() {
     try {
         allBooks = await request(`${API_URL}/books`);
@@ -169,7 +195,6 @@ async function loadBooks() {
     }
 }
 
-// ─── RENDER COM PAGINAÇÃO ─────────────────────────────────
 function renderBooks(booksList) {
     const tbody = document.getElementById("table-books-body");
     if (!tbody) return;
@@ -185,20 +210,22 @@ function renderBooks(booksList) {
     pageItems.forEach((b) => {
         tbody.innerHTML += `
             <tr>
-                <td>${escapeHtml(b.id)}</td>
-                <td>${escapeHtml(b.title)}</td>
-                <td>${escapeHtml(b.author)}</td>
-                <td class="status-${escapeAttr(b.status)}">${escapeHtml(b.status)}</td>
-                <td>
+                <td data-label="ID">${escapeHtml(b.id)}</td>
+                <td data-label="Título">${escapeHtml(b.title)}</td>
+                <td data-label="Autor">${escapeHtml(b.author)}</td>
+                <td data-label="Status" class="status-${escapeAttr(b.status)}">${escapeHtml(b.status)}</td>
+                <td data-label="Ações">
                     <button
                         onclick="openEditBookModal('${escapeAttr(b.id)}', '${escapeAttr(b.title)}', '${escapeAttr(b.author)}')"
                         class="btn-edit-row"
                         type="button"
+                        aria-label="Editar livro"
                     >✏️</button>
                     <button
                         onclick="deleteBook('${escapeAttr(b.id)}')"
                         class="btn-delete-row"
                         type="button"
+                        aria-label="Remover livro"
                     >🗑️</button>
                 </td>
             </tr>
@@ -228,11 +255,11 @@ function renderPagination(total, totalPages) {
             Mostrando <b>${start}–${end}</b> de <b>${total}</b> livros
         </span>
         <div class="pagination-controls">
-            <button ${btnStyle} onclick="goToPage(1)" ${currentPage === 1 ? "disabled" : ""} title="Primeira">«</button>
-            <button ${btnStyle} onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? "disabled" : ""} title="Anterior">‹</button>
-            <span class="pagination-label">Página <b>${currentPage}</b> de <b>${totalPages}</b></span>
-            <button ${btnStyle} onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? "disabled" : ""} title="Próxima">›</button>
-            <button ${btnStyle} onclick="goToPage(${totalPages})" ${currentPage === totalPages ? "disabled" : ""} title="Última">»</button>
+            <button ${btnStyle} onclick="goToPage(1)" ${currentPage === 1 ? "disabled" : ""} title="Primeira" aria-label="Primeira página">«</button>
+            <button ${btnStyle} onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? "disabled" : ""} title="Anterior" aria-label="Página anterior">‹</button>
+            <span class="pagination-label">Pág. <b>${currentPage}</b>/<b>${totalPages}</b></span>
+            <button ${btnStyle} onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? "disabled" : ""} title="Próxima" aria-label="Próxima página">›</button>
+            <button ${btnStyle} onclick="goToPage(${totalPages})" ${currentPage === totalPages ? "disabled" : ""} title="Última" aria-label="Última página">»</button>
         </div>
     `;
 }
@@ -249,9 +276,12 @@ function goToPage(page) {
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     currentPage = Math.max(1, Math.min(page, totalPages));
     renderBooks(filtered);
+
+    // Rola para o topo da tabela ao mudar de página (útil no celular)
+    document.querySelector("#view-books .table-wrapper")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ─── BUSCA DE LIVROS (reseta página) ─────────────────────
+// ─── BUSCA DE LIVROS ─────────────────────────────────────
 document.getElementById("search-book-input").addEventListener("input", (e) => {
     currentPage = 1;
     const term = e.target.value.toLowerCase().trim();
@@ -272,10 +302,12 @@ function openEditBookModal(id, title, author) {
     document.getElementById("edit-book-title").value = title;
     document.getElementById("edit-book-author").value = author;
     document.getElementById("modal-edit-book").style.display = "block";
+    document.body.style.overflow = "hidden";
 }
 
 function closeEditBookModal() {
     document.getElementById("modal-edit-book").style.display = "none";
+    document.body.style.overflow = "";
 }
 
 async function updateBook() {
@@ -444,29 +476,29 @@ async function loadLoans() {
 
             tbody.innerHTML += `
                 <tr>
-                    <td>${escapeHtml(l.studentName)}</td>
-                    <td>${escapeHtml(l.phone || "---")}</td>
-                    <td>${escapeHtml(l.school || "---")}</td>
-                    <td>${escapeHtml(l.grade || "---")}</td>
-                    <td>${escapeHtml(l.turma || "---")}</td>
-                    <td>${escapeHtml(l.bookTitle)}</td>
-                    <td>
-                        ${escapeHtml(l.returnDate)}
+                    <td data-label="Aluno">${escapeHtml(l.studentName)}</td>
+                    <td data-label="Telefone">${escapeHtml(l.phone || "---")}</td>
+                    <td data-label="Escola">${escapeHtml(l.school || "---")}</td>
+                    <td data-label="Série">${escapeHtml(l.grade || "---")}</td>
+                    <td data-label="Turma">${escapeHtml(l.turma || "---")}</td>
+                    <td data-label="Livro">${escapeHtml(l.bookTitle)}</td>
+                    <td data-label="Devolução">
+                        <span>${escapeHtml(l.returnDate)}
                         ${isLate
                             ? '<span class="badge-late">ATRASADO</span>'
-                            : '<span class="badge-ontime">EM DIA</span>'}
+                            : '<span class="badge-ontime">EM DIA</span>'}</span>
                     </td>
-                    <td>
+                    <td data-label="Ações">
                         <button
                             onclick="openEditLoanModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.school || "")}', '${escapeAttr(l.grade || "")}', '${escapeAttr(l.phone || "")}', '${escapeAttr(l.turma || "")}')"
                             class="btn-edit-row"
                             type="button"
+                            aria-label="Editar empréstimo"
                         >✏️</button>
                         <button
                             onclick="openModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.bookTitle)}', '${escapeAttr(l.returnDate)}', '${escapeAttr(l.phone || "---")}', '${escapeAttr(l.school || "---")}', '${escapeAttr(l.grade || "---")}', '${escapeAttr(l.renewCount || 0)}', '${escapeAttr(l.turma || "---")}')"
                             class="btn-ver"
                             type="button"
-                            style="background: var(--surface-2); border-radius: 4px; padding: 4px 8px; color: var(--text); font-size: 12px; border: 1px solid var(--border); cursor: pointer; transition: all 0.2s;"
                         >🔍 Detalhes</button>
                     </td>
                 </tr>
@@ -485,10 +517,12 @@ function openEditLoanModal(id, student, school, grade, phone, turma) {
     document.getElementById("edit-loan-phone").value = phone || "";
     document.getElementById("edit-loan-turma").value = turma || "";
     document.getElementById("modal-edit-loan").style.display = "block";
+    document.body.style.overflow = "hidden";
 }
 
 function closeEditLoanModal() {
     document.getElementById("modal-edit-loan").style.display = "none";
+    document.body.style.overflow = "";
 }
 
 async function updateLoan() {
@@ -562,21 +596,23 @@ function openModal(id, student, book, date, phone, school, grade, renewCount, tu
         : '<span class="badge-ontime">EM DIA</span>';
 
     document.getElementById("modal-details").innerHTML = `
-        <p><b>Aluno:</b> ${escapeHtml(student)}</p>
-        <p><b>Telefone:</b> ${escapeHtml(phone)}</p>
-        <p><b>Escola:</b> ${escapeHtml(school)}</p>
-        <p><b>Série:</b> ${escapeHtml(grade)}</p>
-        <p><b>Turma:</b> ${escapeHtml(turma)}</p>
-        <p><b>Livro:</b> ${escapeHtml(book)}</p>
-        <p><b>Entrega:</b> ${escapeHtml(date)} ${statusBadge}</p>
-        <p><b>Renovações:</b> ${escapeHtml(renewCount)}</p>
+        <p><b>Aluno</b> <span>${escapeHtml(student)}</span></p>
+        <p><b>Telefone</b> <span>${escapeHtml(phone)}</span></p>
+        <p><b>Escola</b> <span>${escapeHtml(school)}</span></p>
+        <p><b>Série</b> <span>${escapeHtml(grade)}</span></p>
+        <p><b>Turma</b> <span>${escapeHtml(turma)}</span></p>
+        <p><b>Livro</b> <span>${escapeHtml(book)}</span></p>
+        <p><b>Entrega</b> <span>${escapeHtml(date)} ${statusBadge}</span></p>
+        <p><b>Renovações</b> <span>${escapeHtml(renewCount)}</span></p>
     `;
 
     document.getElementById("modal-loan").style.display = "block";
+    document.body.style.overflow = "hidden";
 }
 
 function closeModal() {
     document.getElementById("modal-loan").style.display = "none";
+    document.body.style.overflow = "";
 }
 
 document.getElementById("btn-confirm-return").onclick = async () => {
@@ -633,23 +669,88 @@ function toggleTheme() {
     document.body.classList.toggle("light-theme", isDark);
     document.body.classList.toggle("dark-theme", !isDark);
 
-    document.getElementById("theme-toggle").textContent = isDark ? "⚫" : "⚪";
+    // Sidebar theme toggle (troca ícones lua/sol)
+    const sidebarMoon = document.querySelector("#theme-toggle .icon-moon");
+    const sidebarSun = document.querySelector("#theme-toggle .icon-sun");
+    if (sidebarMoon && sidebarSun) {
+        sidebarMoon.style.display = isDark ? "none" : "";
+        sidebarSun.style.display = isDark ? "" : "none";
+    }
+
+    // Header mobile theme toggle
+    const mhMoon = document.querySelector(".mh-icon-moon");
+    const mhSun = document.querySelector(".mh-icon-sun");
+    if (mhMoon && mhSun) {
+        mhMoon.style.display = isDark ? "none" : "";
+        mhSun.style.display = isDark ? "" : "none";
+    }
+
+    // Atualiza a meta tag theme-color para a barra de status do celular
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) metaTheme.setAttribute("content", isDark ? "#f0f2f8" : "#0c0e14");
+
     localStorage.setItem("theme", isDark ? "light" : "dark");
 
     loadDashboard();
 }
 
+function applyTheme(savedTheme) {
+    const isLight = savedTheme === "light";
+
+    if (isLight) {
+        document.body.className = "light-theme";
+    } else {
+        document.body.className = "dark-theme";
+    }
+
+    // Sidebar icons
+    const sidebarMoon = document.querySelector("#theme-toggle .icon-moon");
+    const sidebarSun = document.querySelector("#theme-toggle .icon-sun");
+    if (sidebarMoon && sidebarSun) {
+        sidebarMoon.style.display = isLight ? "" : "";
+        sidebarSun.style.display = isLight ? "none" : "none";
+        // No tema escuro mostra lua; no claro mostra sol
+        if (isLight) {
+            sidebarMoon.style.display = "none";
+            sidebarSun.style.display = "";
+        } else {
+            sidebarMoon.style.display = "";
+            sidebarSun.style.display = "none";
+        }
+    }
+
+    // Mobile header icons
+    const mhMoon = document.querySelector(".mh-icon-moon");
+    const mhSun = document.querySelector(".mh-icon-sun");
+    if (mhMoon && mhSun) {
+        if (isLight) {
+            mhMoon.style.display = "none";
+            mhSun.style.display = "";
+        } else {
+            mhMoon.style.display = "";
+            mhSun.style.display = "none";
+        }
+    }
+
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) metaTheme.setAttribute("content", isLight ? "#f0f2f8" : "#0c0e14");
+}
+
+// ─── REDIMENSIONAMENTO (redesenha charts) ─────────────────
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+        if (currentView === "view-dashboard") {
+            loadDashboard();
+        }
+    }, 250);
+});
+
 // ─── INIT ─────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
     const savedTheme = localStorage.getItem("theme") || "dark";
-
-    if (savedTheme === "light") {
-        document.body.className = "light-theme";
-        document.getElementById("theme-toggle").textContent = "⚫";
-    } else {
-        document.body.className = "dark-theme";
-        document.getElementById("theme-toggle").textContent = "⚪";
-    }
+    applyTheme(savedTheme);
 
     document.getElementById("loan-date").valueAsDate = new Date();
 
