@@ -2,17 +2,19 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0c0e14" />
     <title>Biblioteca NTE | Gestão</title>
     <link rel="icon" type="image/png" href="NTEimg.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=2.3" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="dark-theme">
 
+    <!-- ═══ SIDEBAR (Desktop / Tablet) ═══════════════════════════ -->
     <div class="sidebar">
         <div class="sidebar-logo" onclick="navigate('view-dashboard', null, 'btn-dashboard')">
             <div class="logo-icon">
@@ -25,7 +27,7 @@
         </div>
 
         <nav class="sidebar-nav">
-            <button id="btn-dashboard" onclick="navigate('view-dashboard', this)" class="nav-btn active">
+            <button id="btn-dashboard" data-view="view-dashboard" onclick="navigate('view-dashboard', this)" class="nav-btn active">
                 <span class="nav-icon">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
@@ -34,7 +36,7 @@
                 </span>
                 <span>Painel</span>
             </button>
-            <button id="btn-books" onclick="navigate('view-books', this)" class="nav-btn">
+            <button id="btn-books" data-view="view-books" onclick="navigate('view-books', this)" class="nav-btn">
                 <span class="nav-icon">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
@@ -43,7 +45,7 @@
                 </span>
                 <span>Acervo</span>
             </button>
-            <button id="btn-loans" onclick="navigate('view-loans', this)" class="nav-btn">
+            <button id="btn-loans" data-view="view-loans" onclick="navigate('view-loans', this)" class="nav-btn">
                 <span class="nav-icon">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -72,6 +74,31 @@
         </div>
     </div>
 
+    <!-- ═══ MOBILE HEADER (só no celular) ═══════════════════════ -->
+    <header class="mobile-header">
+        <div class="mh-logo" onclick="navigate('view-dashboard', null, 'btn-dashboard')">
+            <div class="logo-icon">
+                <img src="NTEimg.png" alt="NTE" class="logo-img" />
+            </div>
+            <div class="logo-text">
+                <span class="logo-title">Biblioteca</span>
+                <span class="logo-sub">NTE Digital</span>
+            </div>
+        </div>
+        <button class="mh-theme" onclick="toggleTheme()" title="Alternar tema" aria-label="Alternar tema">
+            <svg class="mh-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+            <svg class="mh-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                <circle cx="12" cy="12" r="5"/>
+                <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            </svg>
+        </button>
+    </header>
+
+    <!-- ═══ MAIN CONTENT ═══════════════════════════════════════ -->
     <main class="main-content">
 
         <!-- DASHBOARD -->
@@ -129,14 +156,18 @@
                         <h3>Situação do Acervo</h3>
                         <span class="chart-tag">Hoje</span>
                     </div>
-                    <canvas id="chartStatus"></canvas>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartStatus"></canvas>
+                    </div>
                 </div>
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3>Empréstimos por Mês</h3>
                         <span class="chart-tag">Este ano</span>
                     </div>
-                    <canvas id="chartMonthly"></canvas>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartMonthly"></canvas>
+                    </div>
                 </div>
             </div>
         </section>
@@ -239,7 +270,7 @@
                     </div>
                     <div class="field-group">
                         <label class="field-label">Telefone / WhatsApp <span class="label-opt">(opcional)</span></label>
-                        <input type="text" id="loan-phone" placeholder="(99) 99999-9999" />
+                        <input type="tel" inputmode="tel" id="loan-phone" placeholder="(99) 99999-9999" />
                     </div>
                     <div class="field-group fg-2">
                         <label class="field-label">Escola</label>
@@ -324,13 +355,40 @@
 
     </main>
 
+    <!-- ═══ MOBILE BOTTOM NAV (só no celular) ═══════════════════ -->
+    <nav class="mobile-bottom-nav">
+        <button class="mobile-nav-btn active" data-view="view-dashboard" onclick="navigate('view-dashboard', this)" aria-label="Painel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+                <rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>
+            </svg>
+            <span>Painel</span>
+        </button>
+        <button class="mobile-nav-btn" data-view="view-books" onclick="navigate('view-books', this)" aria-label="Acervo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+            <span>Acervo</span>
+        </button>
+        <button class="mobile-nav-btn" data-view="view-loans" onclick="navigate('view-loans', this)" aria-label="Empréstimos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            <span>Empréstimos</span>
+        </button>
+    </nav>
+
     <!-- Modal: Detalhes -->
     <div id="modal-loan" class="modal">
         <div class="modal-overlay" onclick="closeModal()"></div>
         <div class="modal-box">
             <div class="modal-header">
                 <h3>Ficha de Controle</h3>
-                <button class="modal-close-btn" onclick="closeModal()">
+                <button class="modal-close-btn" onclick="closeModal()" aria-label="Fechar">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                     </svg>
@@ -360,7 +418,7 @@
         <div class="modal-box modal-sm">
             <div class="modal-header">
                 <h3>Editar Livro</h3>
-                <button class="modal-close-btn" onclick="closeEditBookModal()">
+                <button class="modal-close-btn" onclick="closeEditBookModal()" aria-label="Fechar">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                     </svg>
@@ -382,7 +440,7 @@
         <div class="modal-box modal-sm">
             <div class="modal-header">
                 <h3>Editar Dados do Aluno</h3>
-                <button class="modal-close-btn" onclick="closeEditLoanModal()">
+                <button class="modal-close-btn" onclick="closeEditLoanModal()" aria-label="Fechar">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                     </svg>
@@ -390,7 +448,7 @@
             </div>
             <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
                 <div class="field-group"><label class="field-label">Nome</label><input type="text" id="edit-loan-student" /></div>
-                <div class="field-group"><label class="field-label">Telefone <span class="label-opt">(opcional)</span></label><input type="text" id="edit-loan-phone" /></div>
+                <div class="field-group"><label class="field-label">Telefone <span class="label-opt">(opcional)</span></label><input type="tel" inputmode="tel" id="edit-loan-phone" /></div>
                 <div class="field-group">
                     <label class="field-label">Escola</label>
                     <select id="edit-loan-school">
@@ -425,6 +483,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=2.1"></script>
+    <script src="app.js?v=2.3"></script>
 </body>
 </html>
