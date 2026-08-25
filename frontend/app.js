@@ -1,762 +1,729 @@
-const API_URL = "https://biblioteca-vsbz.onrender.com/api";
-let statusChart;
-let monthlyChart;
-let currentLoanId = null;
-let currentBookId = null;
-let allBooks = [];
-let currentView = localStorage.getItem("currentView") || "view-dashboard";
+/* ═══════════════════════════════════════════════════════════
+   BIBLIOTECA NTE · app.js (v3.0)
+   Compatível com o backend atual: usa /books e /loans/all e
+   calcula o painel no cliente. Sem quebrar dados existentes.
+   ═══════════════════════════════════════════════════════════ */
 
-// ─── PAGINAÇÃO ────────────────────────────────────────────
-let currentPage = 1;
-const PAGE_SIZE = 30;
+const API_URL = "https://biblioteca-vsbz.onrender.com/api";
+const PAGE_SIZE = 25;
+
+let allBooks = [];      // todos os exemplares
+let allLoans = [];      // todos os empréstimos (ativos + concluídos)
+let booksPage = 1;
+let historyPage = 1;
+let statusChart, monthlyChart;
+let ctxBookId = null;   // exemplar em edição
+let ctxLoanId = null;   // empréstimo em foco
+
+let currentRoute = localStorage.getItem("nte.route") || "dashboard";
+
+/* ─── HELPERS ─────────────────────────────────────────────── */
+const $  = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+
+function parseBR(d) {
+    const [dd, mm, yy] = String(d).split("/");
+    return new Date(Number(yy), Number(mm) - 1, Number(dd));
+}
+function fmtBR(date) {
+    const p = (n) => String(n).padStart(2, "0");
+    return `${p(date.getDate())}/${p(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
+function daysDiff(target) {
+    const t = new Date().setHours(0, 0, 0, 0);
+    const d = new Date(target).setHours(0, 0, 0, 0);
+    return Math.round((d - t) / 86400000);
+}
+function onlyDigits(s) { return String(s || "").replace(/\D/g, ""); }
 
 async function request(url, options = {}) {
     const res = await fetch(url, options);
-
     let data = null;
-    try {
-        data = await res.json();
-    } catch {
-        data = null;
-    }
-
-    if (!res.ok) {
-        throw new Error(data?.error || "Erro na requisição.");
-    }
-
+    try { data = await res.json(); } catch { data = null; }
+    if (!res.ok) throw new Error(data?.error || "Não foi possível concluir a operação.");
     return data;
 }
 
-function setCurrentView(viewId) {
-    currentView = viewId;
-    localStorage.setItem("currentView", viewId);
+function setConn(state) {
+    const el = $("conn"), label = $("conn-label");
+    if (!el) return;
+    el.classList.remove("online", "offline");
+    if (state === "online") { el.classList.add("online"); label.textContent = "Conectado"; }
+    else if (state === "offline") { el.classList.add("offline"); label.textContent = "Modo demonstração"; }
+    else { label.textContent = "Conectando…"; }
 }
 
-async function navigate(viewId, clickedButton = null, fallbackButtonId = null) {
-    setCurrentView(viewId);
+/* ─── TOASTS ──────────────────────────────────────────────── */
+function toast(msg, type = "info", title = null) {
+    const wrap = $("toasts");
+    const el = document.createElement("div");
+    el.className = `toast ${type}`;
+    const icons = {
+        ok: '<path d="M20 6 9 17l-5-5"/>',
+        err: '<path d="M18 6 6 18M6 6l12 12"/>',
+        info: '<path d="M12 8v5M12 16h.01"/><circle cx="12" cy="12" r="9"/>'
+    };
+    el.innerHTML = `
+        <svg class="toast-ico" viewBox="0 0 24 24">${icons[type] || icons.info}</svg>
+        <div class="toast-body">${title ? `<b>${esc(title)}</b>` : ""}<small>${esc(msg)}</small></div>`;
+    wrap.appendChild(el);
+    setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 300); }, 3600);
+}
 
-    // Troca a view ativa
-    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
-    const targetView = document.getElementById(viewId);
-    if (targetView) targetView.classList.add("active");
+/* ─── CONFIRM estilizado ──────────────────────────────────── */
+let confirmResolver = null;
+function askConfirm({ title = "Confirmar", text = "", okLabel = "Confirmar", danger = true }) {
+    return new Promise((resolve) => {
+        confirmResolver = resolve;
+        $("confirm-title").textContent = title;
+        $("confirm-text").textContent = text;
+        const ok = $("confirm-ok");
+        ok.textContent = okLabel;
+        ok.className = danger ? "btn btn-danger" : "btn btn-success";
+        $("confirm-icon").innerHTML = danger
+            ? '<svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>'
+            : '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
+        $("confirm-icon").style.background = danger ? "rgba(239,83,80,.13)" : "rgba(47,191,113,.13)";
+        $("confirm-icon").style.color = danger ? "var(--red)" : "var(--green)";
+        openModal("modal-confirm");
+    });
+}
+function resolveConfirm(val) {
+    closeModal("modal-confirm");
+    if (confirmResolver) { confirmResolver(val); confirmResolver = null; }
+}
 
-    // Limpa active de todos os botões de navegação (sidebar + mobile bottom nav)
-    document.querySelectorAll(".nav-btn, .mobile-nav-btn").forEach((b) => b.classList.remove("active"));
+/* ─── MODAIS ──────────────────────────────────────────────── */
+function openModal(id) { $(id).classList.add("show"); document.body.style.overflow = "hidden"; }
+function closeModal(id) {
+    $(id).classList.remove("show");
+    if (!document.querySelector(".modal.show")) document.body.style.overflow = "";
+}
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") document.querySelectorAll(".modal.show").forEach((m) => closeModal(m.id));
+});
 
-    // Ativa TODOS os botões (de ambas as barras) correspondentes à view
-    document.querySelectorAll(`[data-view="${viewId}"]`).forEach((b) => b.classList.add("active"));
-
-    // Fallback — caso algum botão específico tenha sido passado sem data-view
-    if (clickedButton && !clickedButton.hasAttribute("data-view")) {
-        clickedButton.classList.add("active");
-    } else if (!clickedButton && fallbackButtonId) {
-        document.getElementById(fallbackButtonId)?.classList.add("active");
-    }
-
-    // Rola para o topo ao trocar de tela (útil no celular)
+/* ─── NAVEGAÇÃO ───────────────────────────────────────────── */
+function go(route, btn = null) {
+    currentRoute = route;
+    localStorage.setItem("nte.route", route);
+    document.querySelectorAll(".route").forEach((r) => r.classList.remove("is-active"));
+    $(`route-${route}`)?.classList.add("is-active");
+    document.querySelectorAll(".nav-item, .tab").forEach((b) => b.classList.remove("is-active"));
+    document.querySelectorAll(`[data-route="${route}"]`).forEach((b) => b.classList.add("is-active"));
     window.scrollTo({ top: 0, behavior: "smooth" });
 
-    if (viewId === "view-dashboard") {
-        await loadDashboard();
-    }
-
-    if (viewId === "view-books") {
-        await loadBooks();
-    }
-
-    if (viewId === "view-loans") {
-        await loadBooks();
-        await loadLoans();
-    }
+    if (route === "dashboard") renderDashboard();
+    if (route === "books") { booksPage = 1; renderBooks(); }
+    if (route === "loans") renderLoans();
+    if (route === "history") { historyPage = 1; renderHistory(); }
 }
 
-function escapeHtml(value) {
-    return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+/* ─── CACHE LOCAL (pinta na hora, atualiza depois) ────────── */
+const CACHE_KEY = "nte.cache.v1";
+function saveCache() {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ books: allBooks, loans: allLoans, at: Date.now() })); } catch {}
 }
-
-function escapeAttr(value) {
-    return escapeHtml(value);
-}
-
-function parseBRDate(brDate) {
-    const [day, month, year] = String(brDate).split("/");
-    return new Date(Number(year), Number(month) - 1, Number(day));
-}
-
-// ─── DASHBOARD ────────────────────────────────────────────
-async function loadDashboard() {
+function loadCache() {
     try {
-        const data = await request(`${API_URL}/dashboard`);
-
-        document.getElementById("dash-total-books").textContent = data.totalBooks ?? 0;
-        document.getElementById("dash-rented-books").textContent = data.rentedBooks ?? 0;
-        document.getElementById("dash-late-loans").textContent = data.lateLoans ?? 0;
-
-        const isDark = document.body.classList.contains("dark-theme");
-        const color = isDark ? "#e4eaf8" : "#111827";
-        const gridColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
-        const isMobile = window.innerWidth <= 768;
-
-        if (statusChart) statusChart.destroy();
-        statusChart = new Chart(document.getElementById("chartStatus"), {
-            type: "doughnut",
-            data: {
-                labels: ["Livres", "Alugados"],
-                datasets: [
-                    {
-                        data: [data.availableBooks ?? 0, data.rentedBooks ?? 0],
-                        backgroundColor: ["#6ea8fe", "#f5a623"],
-                        borderColor: "transparent",
-                        borderWidth: 0,
-                        hoverOffset: 6
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: "60%",
-                layout: {
-                    padding: { top: 4, bottom: 4 }
-                },
-                plugins: {
-                    legend: {
-                        position: "bottom",
-                        labels: {
-                            color,
-                            padding: isMobile ? 10 : 14,
-                            font: { family: "Geist", size: isMobile ? 11 : 12 },
-                            boxWidth: 10,
-                            boxHeight: 10,
-                            usePointStyle: true,
-                            pointStyle: "circle"
-                        }
-                    }
-                }
-            }
-        });
-
-        if (monthlyChart) monthlyChart.destroy();
-        monthlyChart = new Chart(document.getElementById("chartMonthly"), {
-            type: "bar",
-            data: {
-                labels: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
-                datasets: [
-                    {
-                        label: "Empréstimos",
-                        data: data.monthlyData ?? new Array(12).fill(0),
-                        backgroundColor: "#6ea8fe",
-                        borderRadius: 6,
-                        maxBarThickness: isMobile ? 18 : 28
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: {
-                    padding: { top: 4, bottom: 0 }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: { color, stepSize: 1, font: { family: "Geist", size: isMobile ? 10 : 11 } },
-                        grid: { color: gridColor, drawBorder: false }
-                    },
-                    x: {
-                        ticks: { color, font: { family: "Geist", size: isMobile ? 10 : 11 } },
-                        grid: { display: false }
-                    }
-                },
-                plugins: {
-                    legend: { display: false }
-                }
-            }
-        });
-    } catch (error) {
-        console.error("Erro ao carregar dashboard:", error);
-    }
+        const c = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+        if (!c || !Array.isArray(c.books) || !c.books.length) return false;
+        allBooks = c.books;
+        allLoans = Array.isArray(c.loans) ? c.loans : [];
+        return true;
+    } catch { return false; }
 }
 
-// ─── LIVROS ───────────────────────────────────────────────
-async function loadBooks() {
+/* ─── CARGA DE DADOS ──────────────────────────────────────── */
+async function loadState({ silent = false } = {}) {
     try {
-        allBooks = await request(`${API_URL}/books`);
-        currentPage = 1;
-        renderBooks(allBooks);
-        setupLoanBookSearch();
-    } catch (error) {
-        console.error("Erro ao carregar livros:", error);
+        const [books, loans] = await Promise.all([
+            request(`${API_URL}/books`),
+            request(`${API_URL}/loans/all`)
+        ]);
+        allBooks = Array.isArray(books) ? books : [];
+        allLoans = Array.isArray(loans) ? loans : [];
+        setConn("online");
+        saveCache();
+    } catch (err) {
+        if (!allBooks.length) { allBooks = DEMO_BOOKS; allLoans = DEMO_LOANS; }
+        setConn("offline");
+        if (!silent) toast("Sem conexão com o servidor. Exibindo dados de demonstração.", "info", "Modo offline");
     }
+    updateCounts();
 }
 
-function renderBooks(booksList) {
-    const tbody = document.getElementById("table-books-body");
-    if (!tbody) return;
+/* Refresh leve: só empréstimos (0,6s) + ajuste local do exemplar afetado.
+   Usado após ações — evita rebaixar os 232 KB do acervo. */
+async function refreshLoans() {
+    try {
+        const loans = await request(`${API_URL}/loans/all`);
+        if (Array.isArray(loans)) allLoans = loans;
+        setConn("online");
+        saveCache();
+    } catch { /* mantém o estado atual em silêncio */ }
+    updateCounts();
+}
+function setBookStatus(bookId, status) {
+    const b = allBooks.find((x) => String(x.id) === String(bookId));
+    if (b) b.status = status;
+}
+function renderCurrent() {
+    if (currentRoute === "dashboard") renderDashboard();
+    else if (currentRoute === "books") renderBooks();
+    else if (currentRoute === "loans") renderLoans();
+    else if (currentRoute === "history") renderHistory();
+}
 
-    const totalPages = Math.max(1, Math.ceil(booksList.length / PAGE_SIZE));
-    if (currentPage > totalPages) currentPage = 1;
+function updateCounts() {
+    $("nav-count-books").textContent = allBooks.length;
+    $("nav-count-loans").textContent = activeLoans().length;
+}
 
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const pageItems = booksList.slice(start, start + PAGE_SIZE);
+const activeLoans = () => allLoans.filter((l) => l.status === "Ativo");
+const doneLoans = () => allLoans.filter((l) => l.status === "Concluído");
 
-    tbody.innerHTML = "";
+/* ─── PAINEL ──────────────────────────────────────────────── */
+function renderDashboard() {
+    const total = allBooks.length;
+    const out = allBooks.filter((b) => b.status !== "Disponível").length;
+    const avail = total - out;
+    const late = activeLoans().filter((l) => daysDiff(parseBR(l.returnDate)) < 0).length;
+    const pct = total ? Math.round((avail / total) * 100) : 0;
 
-    pageItems.forEach((b) => {
-        tbody.innerHTML += `
-            <tr>
-                <td data-label="ID">${escapeHtml(b.id)}</td>
-                <td data-label="Título">${escapeHtml(b.title)}</td>
-                <td data-label="Autor">${escapeHtml(b.author)}</td>
-                <td data-label="Status" class="status-${escapeAttr(b.status)}">${escapeHtml(b.status)}</td>
-                <td data-label="Ações">
-                    <button
-                        onclick="openEditBookModal('${escapeAttr(b.id)}', '${escapeAttr(b.title)}', '${escapeAttr(b.author)}')"
-                        class="btn-edit-row"
-                        type="button"
-                        aria-label="Editar livro"
-                    >✏️</button>
-                    <button
-                        onclick="deleteBook('${escapeAttr(b.id)}')"
-                        class="btn-delete-row"
-                        type="button"
-                        aria-label="Remover livro"
-                    >🗑️</button>
-                </td>
-            </tr>
-        `;
+    $("s-total").textContent = total;
+    $("s-total-foot").textContent = `${new Set(allBooks.map((b) => b.title)).size} títulos distintos`;
+    $("s-avail").textContent = avail;
+    $("s-avail-meter").style.width = pct + "%";
+    $("s-avail-pct").textContent = pct + "%";
+    $("s-out").textContent = out;
+    $("s-out-foot").textContent = out === 1 ? "livro com um aluno" : "livros com alunos agora";
+    $("s-late").textContent = late;
+    $("s-late-foot").textContent = late === 1 ? "devolução vencida" : "devoluções vencidas";
+    $("route-dashboard").querySelector(".stat-alert").classList.toggle("has-late", late > 0);
+
+    renderCharts(avail, out);
+}
+
+function renderCharts(avail, out) {
+    if (typeof Chart === "undefined") return; // CDN ainda carregando — evita quebrar o painel
+    const dark = document.body.classList.contains("dark");
+    const ink = dark ? "#a99fc4" : "#5f4d80";
+    const grid = dark ? "rgba(157,107,240,.12)" : "rgba(64,0,138,.08)";
+    const mobile = window.innerWidth <= 860;
+    const year = new Date().getFullYear();
+    $("chart-year").textContent = year;
+
+    if (statusChart) statusChart.destroy();
+    statusChart = new Chart($("chartStatus"), {
+        type: "doughnut",
+        data: {
+            labels: ["Disponíveis", "Em circulação"],
+            datasets: [{
+                data: [avail, out],
+                backgroundColor: ["#7c3aed", "#f7b500"],
+                borderColor: dark ? "#141021" : "#fff",
+                borderWidth: 3, hoverOffset: 6
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, cutout: "62%",
+            plugins: { legend: { position: "bottom", labels: {
+                color: ink, padding: 16, usePointStyle: true, pointStyle: "circle",
+                font: { family: "Inter", size: mobile ? 11 : 12.5, weight: 600 }
+            } } }
+        }
     });
 
-    renderPagination(booksList.length, totalPages);
-}
+    const monthly = new Array(12).fill(0);
+    allLoans.forEach((l) => {
+        const r = new Date(l.rentalDate);
+        if (!isNaN(r) && r.getFullYear() === year) monthly[r.getMonth()]++;
+    });
 
-function renderPagination(total, totalPages) {
-    let container = document.getElementById("books-pagination");
-
-    if (!container) {
-        container = document.createElement("div");
-        container.id = "books-pagination";
-        const tableWrapper = document.querySelector("#view-books .table-wrapper");
-        if (tableWrapper) tableWrapper.after(container);
-    }
-
-    const start = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
-    const end = Math.min(currentPage * PAGE_SIZE, total);
-
-    const btnStyle = `class="page-btn"`;
-
-    container.innerHTML = `
-        <span class="pagination-info">
-            Mostrando <b>${start}–${end}</b> de <b>${total}</b> livros
-        </span>
-        <div class="pagination-controls">
-            <button ${btnStyle} onclick="goToPage(1)" ${currentPage === 1 ? "disabled" : ""} title="Primeira" aria-label="Primeira página">«</button>
-            <button ${btnStyle} onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? "disabled" : ""} title="Anterior" aria-label="Página anterior">‹</button>
-            <span class="pagination-label">Pág. <b>${currentPage}</b>/<b>${totalPages}</b></span>
-            <button ${btnStyle} onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? "disabled" : ""} title="Próxima" aria-label="Próxima página">›</button>
-            <button ${btnStyle} onclick="goToPage(${totalPages})" ${currentPage === totalPages ? "disabled" : ""} title="Última" aria-label="Última página">»</button>
-        </div>
-    `;
-}
-
-function goToPage(page) {
-    const term = document.getElementById("search-book-input")?.value.toLowerCase().trim() || "";
-    const filtered = term
-        ? allBooks.filter((b) =>
-            String(b.title).toLowerCase().includes(term) ||
-            String(b.author).toLowerCase().includes(term) ||
-            String(b.id).toLowerCase().includes(term))
-        : allBooks;
-
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-    currentPage = Math.max(1, Math.min(page, totalPages));
-    renderBooks(filtered);
-
-    // Rola para o topo da tabela ao mudar de página (útil no celular)
-    document.querySelector("#view-books .table-wrapper")?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-// ─── BUSCA DE LIVROS ─────────────────────────────────────
-document.getElementById("search-book-input").addEventListener("input", (e) => {
-    currentPage = 1;
-    const term = e.target.value.toLowerCase().trim();
-
-    renderBooks(
-        allBooks.filter((b) => {
-            return (
-                String(b.title).toLowerCase().includes(term) ||
-                String(b.author).toLowerCase().includes(term) ||
-                String(b.id).toLowerCase().includes(term)
-            );
-        })
-    );
-});
-
-function openEditBookModal(id, title, author) {
-    currentBookId = id;
-    document.getElementById("edit-book-title").value = title;
-    document.getElementById("edit-book-author").value = author;
-    document.getElementById("modal-edit-book").style.display = "block";
-    document.body.style.overflow = "hidden";
-}
-
-function closeEditBookModal() {
-    document.getElementById("modal-edit-book").style.display = "none";
-    document.body.style.overflow = "";
-}
-
-async function updateBook() {
-    try {
-        const title = document.getElementById("edit-book-title").value.trim().toUpperCase();
-        const author = document.getElementById("edit-book-author").value.trim().toUpperCase();
-
-        await request(`${API_URL}/books/${encodeURIComponent(currentBookId)}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title, author })
-        });
-
-        closeEditBookModal();
-
-        const book = allBooks.find((b) => String(b.id) === String(currentBookId));
-        if (book) {
-            book.title = title;
-            book.author = author;
+    if (monthlyChart) monthlyChart.destroy();
+    monthlyChart = new Chart($("chartMonthly"), {
+        type: "bar",
+        data: {
+            labels: ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"],
+            datasets: [{
+                data: monthly, backgroundColor: "#7c3aed",
+                borderRadius: 6, maxBarThickness: mobile ? 16 : 26
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, ticks: { color: ink, stepSize: 1, font: { family: "IBM Plex Mono", size: mobile ? 10 : 11 } }, grid: { color: grid } },
+                x: { ticks: { color: ink, font: { family: "Inter", size: mobile ? 10 : 11, weight: 600 } }, grid: { display: false } }
+            },
+            plugins: { legend: { display: false } }
         }
-
-        renderBooks(allBooks);
-        alert("Livro atualizado com sucesso.");
-    } catch (error) {
-        alert(error.message);
-    }
+    });
 }
 
-async function deleteBook(id) {
-    if (!confirm("Deseja remover este livro do acervo?")) return;
-
-    try {
-        await request(`${API_URL}/books/${encodeURIComponent(id)}`, {
-            method: "DELETE"
-        });
-        allBooks = allBooks.filter((b) => String(b.id) !== String(id));
-        renderBooks(allBooks);
-    } catch (error) {
-        alert(error.message);
-    }
+/* ─── ACERVO ──────────────────────────────────────────────── */
+function filteredBooks() {
+    const term = ($("book-search")?.value || "").toLowerCase().trim();
+    if (!term) return allBooks;
+    return allBooks.filter((b) =>
+        String(b.title).toLowerCase().includes(term) ||
+        String(b.author).toLowerCase().includes(term) ||
+        String(b.id).toLowerCase().includes(term));
 }
 
-document.getElementById("form-book").onsubmit = async (e) => {
-    e.preventDefault();
+function renderBooks() {
+    const grouped = $("group-toggle")?.checked;
+    const tbody = $("tb-books");
+    const data = filteredBooks();
 
-    try {
-        await request(`${API_URL}/books`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                id: document.getElementById("book-id").value.trim().toUpperCase(),
-                title: document.getElementById("book-title").value.trim().toUpperCase(),
-                author: document.getElementById("book-author").value.trim().toUpperCase(),
-                quantity: Number(document.getElementById("book-quantity").value)
-            })
-        });
+    if (grouped) return renderBooksGrouped(data);
 
-        e.target.reset();
-        document.getElementById("book-quantity").value = 1;
+    const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE));
+    if (booksPage > totalPages) booksPage = 1;
+    const slice = data.slice((booksPage - 1) * PAGE_SIZE, booksPage * PAGE_SIZE);
 
-        const books = await request(`${API_URL}/books`);
-        allBooks = books;
-        currentPage = 1;
-        renderBooks(allBooks);
-    } catch (error) {
-        alert(error.message);
-    }
-};
-
-// ─── BUSCA DE LIVRO NO FORMULÁRIO DE EMPRÉSTIMO ───────────
-function getAvailableBooks() {
-    return allBooks.filter((b) => b.status === "Disponível");
-}
-
-function renderLoanBookResults(filteredBooks) {
-    const results = document.getElementById("loan-book-results");
-    if (!results) return;
-
-    if (!filteredBooks.length) {
-        results.innerHTML = `<div class="book-search-empty">Nenhum livro disponível encontrado.</div>`;
-        results.classList.add("show");
+    if (!slice.length) {
+        tbody.innerHTML = emptyRow(5, "Nenhum livro encontrado.");
+        $("pager-books").innerHTML = "";
         return;
     }
-
-    results.innerHTML = filteredBooks.map((book) => `
-        <div class="book-search-item" onclick="selectLoanBook('${escapeAttr(book.id)}')">
-            <div class="book-search-title">${escapeHtml(book.title)}</div>
-            <div class="book-search-meta">
-                <span>${escapeHtml(book.author)}</span>
-                <span>ID: ${escapeHtml(book.id)}</span>
-            </div>
-        </div>
-    `).join("");
-
-    results.classList.add("show");
+    tbody.innerHTML = slice.map((b) => {
+        const ok = b.status === "Disponível";
+        return `<tr>
+            <td data-label="Código" class="mono">${esc(b.id)}</td>
+            <td data-label="Título" class="cell-title">${esc(b.title)}</td>
+            <td data-label="Autor">${esc(b.author)}</td>
+            <td data-label="Status"><span class="pill ${ok ? "pill-ok" : "pill-out"}">${ok ? "Disponível" : "Emprestado"}</span></td>
+            <td data-label="Ações" class="ta-r">
+                <div class="row-actions">
+                    <button class="icon-btn" title="Editar" onclick="openBookEdit('${esc(b.id)}')"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+                    <button class="icon-btn danger" title="Remover" onclick="removeBook('${esc(b.id)}')"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/></svg></button>
+                </div>
+            </td>
+        </tr>`;
+    }).join("");
+    renderPager("pager-books", data.length, totalPages, booksPage, "books");
 }
 
-function setupLoanBookSearch() {
-    const input = document.getElementById("loan-book-search");
-    const hiddenInput = document.getElementById("loan-book-id");
-    const results = document.getElementById("loan-book-results");
+function renderBooksGrouped(data) {
+    const tbody = $("tb-books");
+    const map = new Map();
+    data.forEach((b) => {
+        const key = b.title + "||" + b.author;
+        if (!map.has(key)) map.set(key, { title: b.title, author: b.author, total: 0, avail: 0 });
+        const g = map.get(key);
+        g.total++; if (b.status === "Disponível") g.avail++;
+    });
+    const groups = [...map.values()].sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
 
-    if (!input || !hiddenInput || !results) return;
+    if (!groups.length) { tbody.innerHTML = emptyRow(5, "Nenhum livro encontrado."); $("pager-books").innerHTML = ""; return; }
 
-    input.oninput = () => {
-        const term = input.value.toLowerCase().trim();
-        hiddenInput.value = "";
-
-        const availableBooks = getAvailableBooks();
-
-        if (!term) {
-            renderLoanBookResults(availableBooks.slice(0, 8));
-            return;
-        }
-
-        const filtered = availableBooks.filter((book) => {
-            return (
-                String(book.title).toLowerCase().includes(term) ||
-                String(book.author).toLowerCase().includes(term) ||
-                String(book.id).toLowerCase().includes(term)
-            );
-        });
-
-        renderLoanBookResults(filtered.slice(0, 20));
-    };
-
-    input.onfocus = () => {
-        renderLoanBookResults(getAvailableBooks().slice(0, 8));
-    };
+    tbody.innerHTML = groups.map((g) => {
+        const pillCls = g.avail === 0 ? "pill-late" : g.avail < g.total ? "pill-out" : "pill-ok";
+        return `<tr>
+            <td data-label="Título" class="cell-title">${esc(g.title)}</td>
+            <td data-label="Autor">${esc(g.author)}</td>
+            <td data-label="Exemplares" class="mono">${g.total}</td>
+            <td data-label="Disponíveis"><span class="pill ${pillCls}">${g.avail} de ${g.total} livres</span></td>
+            <td class="ta-r"></td>
+        </tr>`;
+    }).join("");
+    $("tb-books").closest("table").querySelector("thead").innerHTML =
+        `<tr><th>Título</th><th>Autor / Editora</th><th>Exemplares</th><th>Disponibilidade</th><th></th></tr>`;
+    $("pager-books").innerHTML = `<span class="pager-info"><b>${groups.length}</b> títulos distintos · <b>${data.length}</b> exemplares</span>`;
 }
 
-function selectLoanBook(bookId) {
-    const book = allBooks.find((b) => String(b.id) === String(bookId));
-    if (!book) return;
-
-    document.getElementById("loan-book-search").value = book.title;
-    document.getElementById("loan-book-id").value = book.id;
-    document.getElementById("loan-book-results").classList.remove("show");
+function restoreBooksHead() {
+    $("tb-books").closest("table").querySelector("thead").innerHTML =
+        `<tr><th>Código</th><th>Título</th><th>Autor / Editora</th><th>Status</th><th class="ta-r">Ações</th></tr>`;
 }
 
-document.addEventListener("click", (event) => {
-    const wrapper = document.querySelector(".book-search-wrapper");
-    const results = document.getElementById("loan-book-results");
-
-    if (!wrapper || !results) return;
-
-    if (!wrapper.contains(event.target)) {
-        results.classList.remove("show");
-    }
-});
-
-// ─── EMPRÉSTIMOS ──────────────────────────────────────────
-async function loadLoans() {
-    try {
-        const loans = await request(`${API_URL}/loans`);
-        const tbody = document.getElementById("table-loans-body");
-        if (!tbody) return;
-
-        tbody.innerHTML = "";
-
-        const today = new Date().setHours(0, 0, 0, 0);
-
-        loans.forEach((l) => {
-            const dueDate = parseBRDate(l.returnDate).setHours(0, 0, 0, 0);
-            const isLate = dueDate < today;
-
-            tbody.innerHTML += `
-                <tr>
-                    <td data-label="Aluno">${escapeHtml(l.studentName)}</td>
-                    <td data-label="Telefone">${escapeHtml(l.phone || "---")}</td>
-                    <td data-label="Escola">${escapeHtml(l.school || "---")}</td>
-                    <td data-label="Série">${escapeHtml(l.grade || "---")}</td>
-                    <td data-label="Turma">${escapeHtml(l.turma || "---")}</td>
-                    <td data-label="Livro">${escapeHtml(l.bookTitle)}</td>
-                    <td data-label="Devolução">
-                        <span>${escapeHtml(l.returnDate)}
-                        ${isLate
-                            ? '<span class="badge-late">ATRASADO</span>'
-                            : '<span class="badge-ontime">EM DIA</span>'}</span>
-                    </td>
-                    <td data-label="Ações">
-                        <button
-                            onclick="openEditLoanModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.school || "")}', '${escapeAttr(l.grade || "")}', '${escapeAttr(l.phone || "")}', '${escapeAttr(l.turma || "")}')"
-                            class="btn-edit-row"
-                            type="button"
-                            aria-label="Editar empréstimo"
-                        >✏️</button>
-                        <button
-                            onclick="openModal('${escapeAttr(l.id)}', '${escapeAttr(l.studentName)}', '${escapeAttr(l.bookTitle)}', '${escapeAttr(l.returnDate)}', '${escapeAttr(l.phone || "---")}', '${escapeAttr(l.school || "---")}', '${escapeAttr(l.grade || "---")}', '${escapeAttr(l.renewCount || 0)}', '${escapeAttr(l.turma || "---")}')"
-                            class="btn-ver"
-                            type="button"
-                        >🔍 Detalhes</button>
-                    </td>
-                </tr>
-            `;
-        });
-    } catch (error) {
-        console.error("Erro ao carregar empréstimos:", error);
-    }
-}
-
-function openEditLoanModal(id, student, school, grade, phone, turma) {
-    currentLoanId = id;
-    document.getElementById("edit-loan-student").value = student;
-    document.getElementById("edit-loan-school").value = school;
-    document.getElementById("edit-loan-grade").value = grade;
-    document.getElementById("edit-loan-phone").value = phone || "";
-    document.getElementById("edit-loan-turma").value = turma || "";
-    document.getElementById("modal-edit-loan").style.display = "block";
-    document.body.style.overflow = "hidden";
-}
-
-function closeEditLoanModal() {
-    document.getElementById("modal-edit-loan").style.display = "none";
-    document.body.style.overflow = "";
-}
-
-async function updateLoan() {
-    try {
-        const studentName = document.getElementById("edit-loan-student").value.trim();
-        const school = document.getElementById("edit-loan-school").value;
-        const grade = document.getElementById("edit-loan-grade").value;
-        const phone = document.getElementById("edit-loan-phone").value.trim();
-        const turma = document.getElementById("edit-loan-turma").value;
-
-        await request(`${API_URL}/loans/${encodeURIComponent(currentLoanId)}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ studentName, school, grade, phone, turma })
-        });
-
-        closeEditLoanModal();
-        await loadLoans();
-        alert("Dados do aluno atualizados com sucesso.");
-    } catch (error) {
-        alert(error.message);
-    }
-}
-
-document.getElementById("form-loan").onsubmit = async (e) => {
+/* Cadastro */
+$("form-book").onsubmit = async (e) => {
     e.preventDefault();
-
+    const body = {
+        id: $("book-id").value.trim().toUpperCase(),
+        title: $("book-title").value.trim().toUpperCase(),
+        author: $("book-author").value.trim().toUpperCase(),
+        quantity: Number($("book-qty").value)
+    };
     try {
-        const bookId = document.getElementById("loan-book-id").value.trim();
+        const r = await request(`${API_URL}/books`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+        });
+        e.target.reset(); $("book-qty").value = 1;
+        await loadState({ silent: true });
+        booksPage = 1; renderBooks();
+        toast(r.message || "Livro cadastrado.", "ok", "Pronto");
+    } catch (err) { toast(err.message, "err", "Erro no cadastro"); }
+};
 
-        if (!bookId) {
-            alert("Selecione um livro da lista de busca.");
-            return;
-        }
+function openBookEdit(id) {
+    const b = allBooks.find((x) => String(x.id) === String(id));
+    if (!b) return;
+    ctxBookId = id;
+    $("edit-book-title").value = b.title;
+    $("edit-book-author").value = b.author;
+    openModal("modal-book");
+}
+async function saveBook() {
+    const title = $("edit-book-title").value.trim().toUpperCase();
+    const author = $("edit-book-author").value.trim().toUpperCase();
+    try {
+        await request(`${API_URL}/books/${encodeURIComponent(ctxBookId)}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, author })
+        });
+        const b = allBooks.find((x) => String(x.id) === String(ctxBookId));
+        if (b) { b.title = title; b.author = author; }
+        allLoans.forEach((l) => { if (l.bookId === ctxBookId) l.bookTitle = title; });
+        closeModal("modal-book"); renderBooks();
+        toast("Livro atualizado.", "ok", "Salvo");
+    } catch (err) { toast(err.message, "err", "Erro"); }
+}
+async function removeBook(id) {
+    const ok = await askConfirm({ title: "Remover livro", text: `Remover o exemplar ${id} do acervo? Essa ação não pode ser desfeita.`, okLabel: "Remover" });
+    if (!ok) return;
+    try {
+        await request(`${API_URL}/books/${encodeURIComponent(id)}`, { method: "DELETE" });
+        allBooks = allBooks.filter((b) => String(b.id) !== String(id));
+        updateCounts(); renderBooks();
+        toast("Livro removido do acervo.", "ok", "Removido");
+    } catch (err) { toast(err.message, "err", "Não foi possível remover"); }
+}
 
+/* ─── PICKER de livro no empréstimo ───────────────────────── */
+function availableBooks() { return allBooks.filter((b) => b.status === "Disponível"); }
+
+function renderPicker(list) {
+    const box = $("loan-book-results");
+    if (!list.length) { box.innerHTML = `<div class="picker-empty">Nenhum livro disponível encontrado.</div>`; box.classList.add("show"); return; }
+    box.innerHTML = list.map((b) => `
+        <div class="picker-item" onclick="pickBook('${esc(b.id)}')">
+            <div class="pi-title">${esc(b.title)}</div>
+            <div class="pi-meta"><span>${esc(b.author)}</span><span class="mono">${esc(b.id)}</span></div>
+        </div>`).join("");
+    box.classList.add("show");
+}
+function setupPicker() {
+    const input = $("loan-book-search");
+    input.oninput = () => {
+        $("loan-book-id").value = "";
+        const term = input.value.toLowerCase().trim();
+        const avail = availableBooks();
+        const list = term
+            ? avail.filter((b) => String(b.title).toLowerCase().includes(term) || String(b.author).toLowerCase().includes(term) || String(b.id).toLowerCase().includes(term)).slice(0, 25)
+            : avail.slice(0, 8);
+        renderPicker(list);
+    };
+    input.onfocus = () => renderPicker(availableBooks().slice(0, 8));
+}
+function pickBook(id) {
+    const b = allBooks.find((x) => String(x.id) === String(id));
+    if (!b) return;
+    $("loan-book-search").value = b.title;
+    $("loan-book-id").value = b.id;
+    $("loan-book-results").classList.remove("show");
+}
+document.addEventListener("click", (e) => {
+    const box = $("loan-book-results");
+    if (box && !e.target.closest(".book-picker")) box.classList.remove("show");
+});
+
+/* ─── EMPRÉSTIMOS ─────────────────────────────────────────── */
+function filteredLoans() {
+    const term = ($("loan-search")?.value || "").toLowerCase().trim();
+    let list = activeLoans();
+    if (term) list = list.filter((l) =>
+        String(l.studentName).toLowerCase().includes(term) ||
+        String(l.bookTitle).toLowerCase().includes(term) ||
+        String(l.school).toLowerCase().includes(term));
+    return list.sort((a, b) => daysDiff(parseBR(a.returnDate)) - daysDiff(parseBR(b.returnDate)));
+}
+
+function renderLoans() {
+    const tbody = $("tb-loans");
+    const list = filteredLoans();
+    if (!list.length) { tbody.innerHTML = emptyRow(6, "Nenhum empréstimo ativo."); return; }
+
+    tbody.innerHTML = list.map((l) => {
+        const d = daysDiff(parseBR(l.returnDate));
+        const late = d < 0;
+        const badge = late ? `<span class="pill pill-late">Atrasado</span>` : `<span class="pill pill-ok">Em dia</span>`;
+        return `<tr>
+            <td data-label="Aluno" class="cell-full"><div class="cell-title">${esc(l.studentName)}</div><div class="cell-sub">${esc(l.grade || "—")} · ${esc(l.phone || "sem telefone")}</div></td>
+            <td data-label="Escola">${esc(l.school || "—")}</td>
+            <td data-label="Turma">${esc(l.turma || "—")}</td>
+            <td data-label="Livro">${esc(l.bookTitle)}</td>
+            <td data-label="Devolução" class="cell-full"><span class="mono">${esc(l.returnDate)}</span> ${badge}</td>
+            <td data-label="Ações" class="ta-r">
+                <div class="row-actions">
+                    ${l.phone ? `<button class="icon-btn wa" title="Lembrar no WhatsApp" onclick="whatsapp('${esc(l.id)}')"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.5L3 21l2.1-5.6A8.4 8.4 0 1 1 21 11.5z"/></svg></button>` : ""}
+                    <button class="icon-btn" title="Editar aluno" onclick="openLoanEdit('${esc(l.id)}')"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+                    <button class="btn-detail" onclick="openLoanDetail('${esc(l.id)}')"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Ficha</button>
+                </div>
+            </td>
+        </tr>`;
+    }).join("");
+}
+
+$("form-loan").onsubmit = async (e) => {
+    e.preventDefault();
+    const bookId = $("loan-book-id").value.trim();
+    if (!bookId) { toast("Selecione um livro na lista de busca.", "err", "Livro não escolhido"); return; }
+    const body = {
+        studentName: $("loan-student").value.trim(),
+        phone: $("loan-phone").value.trim(),
+        school: $("loan-school").value,
+        grade: $("loan-grade").value,
+        turma: $("loan-turma").value,
+        bookId,
+        rentalDate: $("loan-date").value
+    };
+    try {
         await request(`${API_URL}/loans`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                studentName: document.getElementById("loan-student").value,
-                phone: document.getElementById("loan-phone").value,
-                school: document.getElementById("loan-school").value,
-                grade: document.getElementById("loan-grade").value,
-                turma: document.getElementById("loan-turma").value,
-                bookId,
-                rentalDate: document.getElementById("loan-date").value
-            })
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
         });
-
         e.target.reset();
-        document.getElementById("loan-book-id").value = "";
-        document.getElementById("loan-date").valueAsDate = new Date();
-        document.getElementById("loan-book-results").classList.remove("show");
-
-        await loadLoans();
-        await loadBooks();
-    } catch (error) {
-        alert(error.message);
-    }
+        $("loan-book-id").value = "";
+        $("loan-date").valueAsDate = new Date();
+        $("loan-book-results").classList.remove("show");
+        setBookStatus(bookId, "Alugado");
+        toast("Saída registrada. Devolução agendada para +1 mês.", "ok", "Empréstimo criado");
+        await refreshLoans();
+        renderLoans();
+    } catch (err) { toast(err.message, "err", "Erro no empréstimo"); }
 };
 
-// ─── MODAL DETALHES ───────────────────────────────────────
-function openModal(id, student, book, date, phone, school, grade, renewCount, turma) {
-    currentLoanId = id;
-
-    const today = new Date().setHours(0, 0, 0, 0);
-    const dueDate = parseBRDate(date).setHours(0, 0, 0, 0);
-
-    const statusBadge = dueDate < today
-        ? '<span class="badge-late">ATRASADO</span>'
-        : '<span class="badge-ontime">EM DIA</span>';
-
-    document.getElementById("modal-details").innerHTML = `
-        <p><b>Aluno</b> <span>${escapeHtml(student)}</span></p>
-        <p><b>Telefone</b> <span>${escapeHtml(phone)}</span></p>
-        <p><b>Escola</b> <span>${escapeHtml(school)}</span></p>
-        <p><b>Série</b> <span>${escapeHtml(grade)}</span></p>
-        <p><b>Turma</b> <span>${escapeHtml(turma)}</span></p>
-        <p><b>Livro</b> <span>${escapeHtml(book)}</span></p>
-        <p><b>Entrega</b> <span>${escapeHtml(date)} ${statusBadge}</span></p>
-        <p><b>Renovações</b> <span>${escapeHtml(renewCount)}</span></p>
-    `;
-
-    document.getElementById("modal-loan").style.display = "block";
-    document.body.style.overflow = "hidden";
+function openLoanEdit(id) {
+    const l = allLoans.find((x) => String(x.id) === String(id));
+    if (!l) return;
+    ctxLoanId = id;
+    $("edit-loan-student").value = l.studentName || "";
+    $("edit-loan-phone").value = l.phone || "";
+    $("edit-loan-school").value = l.school || "";
+    $("edit-loan-grade").value = l.grade || "";
+    $("edit-loan-turma").value = l.turma || "";
+    openModal("modal-loan-edit");
+}
+async function saveLoan() {
+    const body = {
+        studentName: $("edit-loan-student").value.trim(),
+        phone: $("edit-loan-phone").value.trim(),
+        school: $("edit-loan-school").value,
+        grade: $("edit-loan-grade").value,
+        turma: $("edit-loan-turma").value
+    };
+    try {
+        await request(`${API_URL}/loans/${encodeURIComponent(ctxLoanId)}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+        });
+        const l = allLoans.find((x) => String(x.id) === String(ctxLoanId));
+        if (l) Object.assign(l, body);
+        closeModal("modal-loan-edit"); renderLoans();
+        toast("Dados do aluno atualizados.", "ok", "Salvo");
+    } catch (err) { toast(err.message, "err", "Erro"); }
 }
 
-function closeModal() {
-    document.getElementById("modal-loan").style.display = "none";
-    document.body.style.overflow = "";
+/* Ficha / modal detalhe */
+function openLoanDetail(id) {
+    const l = allLoans.find((x) => String(x.id) === String(id));
+    if (!l) return;
+    ctxLoanId = id;
+    const d = daysDiff(parseBR(l.returnDate));
+    const badge = d < 0 ? `<span class="pill pill-late">${Math.abs(d)}d atrasado</span>` : `<span class="pill pill-ok">em dia</span>`;
+    $("loan-details").innerHTML = `
+        <div class="detail-row"><b>Aluno</b><span>${esc(l.studentName)}</span></div>
+        <div class="detail-row"><b>Telefone</b><span>${esc(l.phone || "—")}</span></div>
+        <div class="detail-row"><b>Escola</b><span>${esc(l.school || "—")}</span></div>
+        <div class="detail-row"><b>Série · Turma</b><span>${esc(l.grade || "—")} · ${esc(l.turma || "—")}</span></div>
+        <div class="detail-row"><b>Livro</b><span>${esc(l.bookTitle)}</span></div>
+        <div class="detail-row"><b>Saída</b><span>${esc(new Date(l.rentalDate).toLocaleDateString("pt-BR"))}</span></div>
+        <div class="detail-row"><b>Devolução</b><span>${esc(l.returnDate)} ${badge}</span></div>
+        <div class="detail-row"><b>Renovações</b><span>${esc(l.renewCount || 0)}</span></div>`;
+    $("btn-return").style.display = l.phone ? "" : "";
+    openModal("modal-loan");
 }
 
-document.getElementById("btn-confirm-return").onclick = async () => {
+$("btn-return").onclick = async () => {
+    const ok = await askConfirm({ title: "Confirmar devolução", text: "Marcar este livro como devolvido? Ele voltará a ficar disponível no acervo.", okLabel: "Confirmar devolução", danger: false });
+    if (!ok) return;
     try {
-        const data = await request(`${API_URL}/loans/${encodeURIComponent(currentLoanId)}/return`, {
-            method: "PATCH"
-        });
-
-        alert(data.message || "Entrega confirmada com sucesso.");
-        closeModal();
-
-        await loadLoans();
-        await loadBooks();
-    } catch (error) {
-        alert(error.message);
-    }
+        const lr = allLoans.find((x) => String(x.id) === String(ctxLoanId));
+        await request(`${API_URL}/loans/${encodeURIComponent(ctxLoanId)}/return`, { method: "PATCH" });
+        if (lr) setBookStatus(lr.bookId, "Disponível");
+        closeModal("modal-loan");
+        toast("Devolução confirmada.", "ok", "Livro na estante");
+        await refreshLoans();
+        renderLoans();
+    } catch (err) { toast(err.message, "err", "Erro"); }
+};
+$("btn-renew").onclick = async () => {
+    try {
+        const r = await request(`${API_URL}/loans/${encodeURIComponent(ctxLoanId)}/renew`, { method: "PATCH" });
+        closeModal("modal-loan");
+        toast(r.message || "Prazo estendido por mais 1 mês.", "ok", "Renovado");
+        await refreshLoans();
+        renderLoans();
+    } catch (err) { toast(err.message, "err", "Erro"); }
+};
+$("btn-delete-loan").onclick = async () => {
+    const ok = await askConfirm({ title: "Remover registro", text: "Apagar este empréstimo do banco de dados? O livro voltará a ficar disponível.", okLabel: "Remover" });
+    if (!ok) return;
+    try {
+        const ld = allLoans.find((x) => String(x.id) === String(ctxLoanId));
+        await request(`${API_URL}/loans/${encodeURIComponent(ctxLoanId)}`, { method: "DELETE" });
+        if (ld && ld.status === "Ativo") setBookStatus(ld.bookId, "Disponível");
+        closeModal("modal-loan");
+        toast("Registro removido.", "ok", "Removido");
+        await refreshLoans();
+        renderLoans();
+    } catch (err) { toast(err.message, "err", "Erro"); }
 };
 
-document.getElementById("btn-renew-loan").onclick = async () => {
-    try {
-        const data = await request(`${API_URL}/loans/${encodeURIComponent(currentLoanId)}/renew`, {
-            method: "PATCH"
-        });
+/* WhatsApp */
+function whatsapp(id) {
+    const l = allLoans.find((x) => String(x.id) === String(id));
+    if (!l || !l.phone) { toast("Este aluno não tem telefone cadastrado.", "err"); return; }
+    const d = daysDiff(parseBR(l.returnDate));
+    const situacao = d < 0
+        ? `está *${Math.abs(d)} dia(s) atrasado* (venceu em ${l.returnDate})`
+        : `vence em ${l.returnDate}`;
+    const msg = `Olá! Aqui é da Biblioteca do NTE. 📚\n\nLembrete: o livro *${l.bookTitle}*, emprestado para ${l.studentName}, ${situacao}.\n\nPode devolver na biblioteca ou renovar o prazo. Obrigado!`;
+    let num = onlyDigits(l.phone);
+    if (num.length <= 11) num = "55" + num;
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, "_blank");
+}
 
-        alert(data.message || "Empréstimo renovado com sucesso.");
-        closeModal();
+/* CSV */
+function exportLoansCSV() {
+    const list = activeLoans();
+    if (!list.length) { toast("Não há empréstimos ativos para exportar.", "info"); return; }
+    const head = ["Aluno", "Telefone", "Escola", "Serie", "Turma", "Livro", "Codigo", "Saida", "Devolucao", "Renovacoes"];
+    const rows = list.map((l) => [
+        l.studentName, l.phone || "", l.school || "", l.grade || "", l.turma || "",
+        l.bookTitle, l.bookId, new Date(l.rentalDate).toLocaleDateString("pt-BR"), l.returnDate, l.renewCount || 0
+    ].map((c) => `"${String(c).replaceAll('"', '""')}"`).join(","));
+    const csv = "\uFEFF" + [head.join(","), ...rows].join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `emprestimos-nte-${fmtBR(new Date()).replaceAll("/", "-")}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    toast(`${list.length} empréstimos exportados.`, "ok", "Planilha gerada");
+}
 
-        await loadLoans();
-    } catch (error) {
-        alert(error.message);
-    }
-};
+/* ─── HISTÓRICO ───────────────────────────────────────────── */
+function filteredHistory() {
+    const term = ($("history-search")?.value || "").toLowerCase().trim();
+    let list = doneLoans().sort((a, b) => new Date(b.deliveredAt || 0) - new Date(a.deliveredAt || 0));
+    if (term) list = list.filter((l) =>
+        String(l.studentName).toLowerCase().includes(term) ||
+        String(l.bookTitle).toLowerCase().includes(term));
+    return list;
+}
+function renderHistory() {
+    const tbody = $("tb-history");
+    const data = filteredHistory();
+    const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE));
+    if (historyPage > totalPages) historyPage = 1;
+    const slice = data.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
 
-document.getElementById("btn-delete-loan").onclick = async () => {
-    if (!confirm("Remover registro do banco de dados?")) return;
+    if (!slice.length) { tbody.innerHTML = emptyRow(5, "Nenhuma devolução registrada ainda."); $("pager-history").innerHTML = ""; return; }
+    tbody.innerHTML = slice.map((l) => `
+        <tr>
+            <td data-label="Aluno" class="cell-title">${esc(l.studentName)}</td>
+            <td data-label="Escola">${esc(l.school || "—")}</td>
+            <td data-label="Livro">${esc(l.bookTitle)}</td>
+            <td data-label="Saída" class="mono">${esc(new Date(l.rentalDate).toLocaleDateString("pt-BR"))}</td>
+            <td data-label="Devolvido" class="mono">${esc(l.deliveredAt ? new Date(l.deliveredAt).toLocaleDateString("pt-BR") : "—")}</td>
+        </tr>`).join("");
+    renderPager("pager-history", data.length, totalPages, historyPage, "history");
+}
 
-    try {
-        await request(`${API_URL}/loans/${encodeURIComponent(currentLoanId)}`, {
-            method: "DELETE"
-        });
+/* ─── PAGER genérico ──────────────────────────────────────── */
+function renderPager(elId, total, totalPages, page, kind) {
+    const start = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+    const end = Math.min(page * PAGE_SIZE, total);
+    $(elId).innerHTML = `
+        <span class="pager-info">Mostrando <b>${start}–${end}</b> de <b>${total}</b></span>
+        <div class="pager-ctrl">
+            <button class="pg-btn" onclick="pageTo('${kind}',1)" ${page === 1 ? "disabled" : ""}>«</button>
+            <button class="pg-btn" onclick="pageTo('${kind}',${page - 1})" ${page === 1 ? "disabled" : ""}>‹</button>
+            <span class="pg-label">Pág <b>${page}</b> / <b>${totalPages}</b></span>
+            <button class="pg-btn" onclick="pageTo('${kind}',${page + 1})" ${page === totalPages ? "disabled" : ""}>›</button>
+            <button class="pg-btn" onclick="pageTo('${kind}',${totalPages})" ${page === totalPages ? "disabled" : ""}>»</button>
+        </div>`;
+}
+function pageTo(kind, p) {
+    if (kind === "books") { booksPage = Math.max(1, p); renderBooks(); document.querySelector("#route-books .table-wrap")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    else { historyPage = Math.max(1, p); renderHistory(); document.querySelector("#route-history .table-wrap")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
+}
 
-        closeModal();
-        await loadLoans();
-        await loadBooks();
-    } catch (error) {
-        alert(error.message);
-    }
-};
+function emptyRow(cols, msg) {
+    return `<tr><td colspan="${cols}"><div class="empty">
+        <svg viewBox="0 0 24 24"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H5.5A1.5 1.5 0 0 0 4 21z"/><path d="M4 19.5A1.5 1.5 0 0 1 5.5 18H20"/></svg>
+        <p>${esc(msg)}</p></div></td></tr>`;
+}
 
-// ─── TEMA ─────────────────────────────────────────────────
+/* ─── BUSCA (listeners) ───────────────────────────────────── */
+$("book-search").addEventListener("input", () => { booksPage = 1; if (!$("group-toggle").checked) restoreBooksHead(); renderBooks(); });
+$("group-toggle").addEventListener("change", () => { if (!$("group-toggle").checked) restoreBooksHead(); });
+$("loan-search").addEventListener("input", renderLoans);
+$("history-search").addEventListener("input", () => { historyPage = 1; renderHistory(); });
+
+/* ─── TEMA ────────────────────────────────────────────────── */
 function toggleTheme() {
-    const isDark = document.body.classList.contains("dark-theme");
-
-    document.body.classList.toggle("light-theme", isDark);
-    document.body.classList.toggle("dark-theme", !isDark);
-
-    // Sidebar theme toggle (troca ícones lua/sol)
-    const sidebarMoon = document.querySelector("#theme-toggle .icon-moon");
-    const sidebarSun = document.querySelector("#theme-toggle .icon-sun");
-    if (sidebarMoon && sidebarSun) {
-        sidebarMoon.style.display = isDark ? "none" : "";
-        sidebarSun.style.display = isDark ? "" : "none";
-    }
-
-    // Header mobile theme toggle
-    const mhMoon = document.querySelector(".mh-icon-moon");
-    const mhSun = document.querySelector(".mh-icon-sun");
-    if (mhMoon && mhSun) {
-        mhMoon.style.display = isDark ? "none" : "";
-        mhSun.style.display = isDark ? "" : "none";
-    }
-
-    // Atualiza a meta tag theme-color para a barra de status do celular
-    const metaTheme = document.querySelector('meta[name="theme-color"]');
-    if (metaTheme) metaTheme.setAttribute("content", isDark ? "#f0f2f8" : "#0c0e14");
-
-    localStorage.setItem("theme", isDark ? "light" : "dark");
-
-    loadDashboard();
+    const dark = document.body.classList.contains("dark");
+    document.body.classList.add("theme-switching");
+    document.body.classList.toggle("dark", !dark);
+    document.body.classList.toggle("light", dark);
+    setTimeout(() => document.body.classList.remove("theme-switching"), 60);
+    localStorage.setItem("nte.theme", dark ? "light" : "dark");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#40008A" : "#25004f");
+    if (currentRoute === "dashboard") renderDashboard();
 }
 
-function applyTheme(savedTheme) {
-    const isLight = savedTheme === "light";
+/* ─── RESIZE (redesenha charts) ───────────────────────────── */
+let rt;
+window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (currentRoute === "dashboard") renderDashboard(); }, 250); });
 
-    if (isLight) {
-        document.body.className = "light-theme";
-    } else {
-        document.body.className = "dark-theme";
-    }
-
-    // Sidebar icons
-    const sidebarMoon = document.querySelector("#theme-toggle .icon-moon");
-    const sidebarSun = document.querySelector("#theme-toggle .icon-sun");
-    if (sidebarMoon && sidebarSun) {
-        sidebarMoon.style.display = isLight ? "" : "";
-        sidebarSun.style.display = isLight ? "none" : "none";
-        // No tema escuro mostra lua; no claro mostra sol
-        if (isLight) {
-            sidebarMoon.style.display = "none";
-            sidebarSun.style.display = "";
-        } else {
-            sidebarMoon.style.display = "";
-            sidebarSun.style.display = "none";
-        }
-    }
-
-    // Mobile header icons
-    const mhMoon = document.querySelector(".mh-icon-moon");
-    const mhSun = document.querySelector(".mh-icon-sun");
-    if (mhMoon && mhSun) {
-        if (isLight) {
-            mhMoon.style.display = "none";
-            mhSun.style.display = "";
-        } else {
-            mhMoon.style.display = "";
-            mhSun.style.display = "none";
-        }
-    }
-
-    const metaTheme = document.querySelector('meta[name="theme-color"]');
-    if (metaTheme) metaTheme.setAttribute("content", isLight ? "#f0f2f8" : "#0c0e14");
-}
-
-// ─── REDIMENSIONAMENTO (redesenha charts) ─────────────────
-let resizeTimer = null;
-window.addEventListener("resize", () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-        if (currentView === "view-dashboard") {
-            loadDashboard();
-        }
-    }, 250);
-});
-
-// ─── INIT ─────────────────────────────────────────────────
+/* ─── INIT ────────────────────────────────────────────────── */
 document.addEventListener("DOMContentLoaded", async () => {
-    const savedTheme = localStorage.getItem("theme") || "dark";
-    applyTheme(savedTheme);
+    const theme = localStorage.getItem("nte.theme") || "dark";
+    document.body.className = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#25004f" : "#40008A");
+    $("loan-date").valueAsDate = new Date();
 
-    document.getElementById("loan-date").valueAsDate = new Date();
+    setupPicker();
 
-    await navigate(currentView, null, currentView === "view-dashboard"
-        ? "btn-dashboard"
-        : currentView === "view-books"
-        ? "btn-books"
-        : "btn-loans");
+    // pinta imediatamente com o último estado salvo (se houver)…
+    const painted = loadCache();
+    if (painted) { updateCounts(); go(currentRoute); }
+
+    // …e busca os dados frescos em seguida
+    await loadState();
+    if (painted) renderCurrent();   // rota/nav já configuradas: só repinta (sem pular o scroll)
+    else go(currentRoute);          // primeira pintura: configura rota + renderiza
 });
+
+/* ─── DADOS DE DEMONSTRAÇÃO (fallback offline) ────────────── */
+const DEMO_BOOKS = [
+    { id: "8951T999A1 ed. ex.1", title: "A ARTE DA GUERRA", author: "SUN TZU", status: "Alugado" },
+    { id: "028.5C578B1 ed. ex.1", title: "A BELA E A FERA", author: "CIRANDA CULTURAL", status: "Disponível" },
+    { id: "028.5C578B1 ed. ex.2", title: "A BELA E A FERA", author: "CIRANDA CULTURAL", status: "Disponível" },
+    { id: "833K11M1 ed. ex.1", title: "A METAMORFOSE", author: "FRANZ KAFKA", status: "Alugado" },
+    { id: "833H766O1 ed. ex.1", title: "A ODISSEIA", author: "HOMERO", status: "Disponível" },
+    { id: "B8693A848D1 ed. ex.1", title: "DOM CASMURRO", author: "MACHADO DE ASSIS", status: "Disponível" },
+    { id: "813P743C1 ed. ex.1", title: "O CORVO", author: "EDGAR ALLAN POE", status: "Disponível" },
+    { id: "184P716B1 ed. ex.1", title: "O BANQUETE", author: "PLATÃO", status: "Alugado" }
+];
+const today = new Date();
+const plus = (days) => { const d = new Date(); d.setDate(d.getDate() + days); return d; };
+const DEMO_LOANS = [
+    { id: "d1", studentName: "Ana Beatriz Souza", phone: "99991112222", school: "E.M Cléber Sampaio", grade: "8° Ano", turma: "A", bookId: "8951T999A1 ed. ex.1", bookTitle: "A ARTE DA GUERRA", rentalDate: new Date(today.getFullYear(), today.getMonth(), 2).toISOString(), returnDate: fmtBR(plus(-4)), status: "Ativo", renewCount: 1 },
+    { id: "d2", studentName: "Carlos Eduardo Lima", phone: "", school: "E.M Moacyr Bacelar Nunes", grade: "9° Ano", turma: "B", bookId: "833K11M1 ed. ex.1", bookTitle: "A METAMORFOSE", rentalDate: new Date().toISOString(), returnDate: fmtBR(plus(2)), status: "Ativo", renewCount: 0 },
+    { id: "d3", studentName: "Mariana Rocha", phone: "99993334444", school: "E.M José Barreto De Araújo", grade: "8° Ano", turma: "C", bookId: "184P716B1 ed. ex.1", bookTitle: "O BANQUETE", rentalDate: new Date().toISOString(), returnDate: fmtBR(plus(20)), status: "Ativo", renewCount: 0 },
+    { id: "d4", studentName: "João Pedro Alves", phone: "99995556666", school: "E.M Cléber Sampaio", grade: "7° Ano", turma: "A", bookId: "813P743C1 ed. ex.1", bookTitle: "O CORVO", rentalDate: new Date(today.getFullYear(), today.getMonth() - 1, 5).toISOString(), returnDate: fmtBR(plus(-15)), status: "Concluído", deliveredAt: plus(-12).toISOString(), renewCount: 0 }
+];
